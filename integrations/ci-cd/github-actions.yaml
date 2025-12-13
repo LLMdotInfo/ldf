@@ -1,0 +1,179 @@
+# LDF GitHub Actions Workflow
+#
+# This workflow validates specs and runs tests on pull requests.
+#
+# Usage:
+#   1. Copy this file to .github/workflows/ldf.yaml
+#   2. Adjust paths and commands for your project
+#   3. Add any required secrets (OPENAI_API_KEY for automated audits)
+
+name: LDF Validation
+
+on:
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - '.ldf/**'
+      - 'src/**'
+      - 'tests/**'
+  push:
+    branches: [main]
+
+env:
+  PYTHON_VERSION: '3.11'
+  NODE_VERSION: '18'
+
+jobs:
+  # Lint all specs
+  lint-specs:
+    name: Lint Specifications
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install LDF CLI
+        run: pip install ldf
+
+      - name: Lint all specs
+        run: ldf lint --all
+
+  # Check for spec changes requiring audit
+  audit-check:
+    name: Audit Check
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check for spec changes
+        id: spec-changes
+        run: |
+          CHANGED=$(git diff --name-only origin/${{ github.base_ref }} -- '.ldf/specs/')
+          if [ -n "$CHANGED" ]; then
+            echo "specs_changed=true" >> $GITHUB_OUTPUT
+            echo "Changed specs:"
+            echo "$CHANGED"
+          else
+            echo "specs_changed=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Remind about audit
+        if: steps.spec-changes.outputs.specs_changed == 'true'
+        run: |
+          echo "::warning::Specs were modified. Consider running 'ldf audit' before merging."
+
+  # Run tests with coverage
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    needs: lint-specs
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install pytest pytest-cov
+
+      - name: Run tests with coverage
+        run: pytest --cov=. --cov-report=json --cov-report=term
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage.json
+
+  # Validate coverage thresholds
+  coverage-check:
+    name: Coverage Validation
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install LDF CLI
+        run: pip install ldf
+
+      - name: Download coverage report
+        uses: actions/download-artifact@v4
+        with:
+          name: coverage-report
+
+      - name: Validate coverage
+        run: ldf coverage --validate
+
+  # Optional: Automated audit with OpenAI
+  automated-audit:
+    name: Automated Spec Audit
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    needs: lint-specs
+    # Only run if OPENAI_API_KEY is available
+    env:
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check for API key
+        id: check-key
+        run: |
+          if [ -n "$OPENAI_API_KEY" ]; then
+            echo "has_key=true" >> $GITHUB_OUTPUT
+          else
+            echo "has_key=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Set up Python
+        if: steps.check-key.outputs.has_key == 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        if: steps.check-key.outputs.has_key == 'true'
+        run: |
+          pip install ldf
+          pip install openai
+
+      - name: Get changed specs
+        if: steps.check-key.outputs.has_key == 'true'
+        id: changed-specs
+        run: |
+          SPECS=$(git diff --name-only origin/${{ github.base_ref }} -- '.ldf/specs/*/requirements.md' | xargs -I{} dirname {} | xargs -I{} basename {})
+          echo "specs=$SPECS" >> $GITHUB_OUTPUT
+
+      - name: Run automated audit
+        if: steps.check-key.outputs.has_key == 'true' && steps.changed-specs.outputs.specs != ''
+        run: |
+          for spec in ${{ steps.changed-specs.outputs.specs }}; do
+            echo "Auditing: $spec"
+            ldf audit --type spec-review --spec $spec --api --output json > audit-$spec.json || true
+          done
+
+      - name: Upload audit results
+        if: steps.check-key.outputs.has_key == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: audit-results
+          path: audit-*.json
+          if-no-files-found: ignore

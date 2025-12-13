@@ -1,0 +1,134 @@
+# LDF GitLab CI Pipeline
+#
+# This pipeline validates specs and runs tests.
+#
+# Usage:
+#   1. Copy this file to .gitlab-ci.yml
+#   2. Adjust paths and commands for your project
+#   3. Add CI/CD variables (OPENAI_API_KEY for automated audits)
+
+stages:
+  - validate
+  - test
+  - coverage
+  - audit
+
+variables:
+  PYTHON_VERSION: "3.11"
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
+
+cache:
+  paths:
+    - .cache/pip
+    - .venv/
+
+# Lint all specs
+lint-specs:
+  stage: validate
+  image: python:${PYTHON_VERSION}
+  before_script:
+    - pip install ldf
+  script:
+    - ldf lint --all
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+# Run tests with coverage
+test:
+  stage: test
+  image: python:${PYTHON_VERSION}
+  before_script:
+    - pip install -r requirements.txt
+    - pip install pytest pytest-cov
+  script:
+    - pytest --cov=. --cov-report=json --cov-report=term
+  coverage: '/TOTAL.*\s+(\d+%)$/'
+  artifacts:
+    reports:
+      coverage_report:
+        coverage_format: cobertura
+        path: coverage.xml
+    paths:
+      - coverage.json
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+# Validate coverage thresholds
+coverage-check:
+  stage: coverage
+  image: python:${PYTHON_VERSION}
+  dependencies:
+    - test
+  before_script:
+    - pip install ldf
+  script:
+    - ldf coverage --validate
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+# Check for spec changes
+spec-changes:
+  stage: validate
+  image: alpine:latest
+  before_script:
+    - apk add --no-cache git
+  script:
+    - |
+      if git diff --name-only origin/$CI_MERGE_REQUEST_TARGET_BRANCH_NAME -- '.ldf/specs/' | grep -q .; then
+        echo "Specs were modified. Consider running 'ldf audit' before merging."
+        echo "SPECS_CHANGED=true" >> spec-changes.env
+      else
+        echo "No spec changes detected."
+        echo "SPECS_CHANGED=false" >> spec-changes.env
+      fi
+  artifacts:
+    reports:
+      dotenv: spec-changes.env
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+
+# Automated audit (optional - requires OPENAI_API_KEY variable)
+automated-audit:
+  stage: audit
+  image: python:${PYTHON_VERSION}
+  dependencies:
+    - spec-changes
+  before_script:
+    - pip install ldf openai
+  script:
+    - |
+      if [ "$SPECS_CHANGED" = "true" ] && [ -n "$OPENAI_API_KEY" ]; then
+        CHANGED_SPECS=$(git diff --name-only origin/$CI_MERGE_REQUEST_TARGET_BRANCH_NAME -- '.ldf/specs/*/requirements.md' | xargs -I{} dirname {} | xargs -I{} basename {})
+        for spec in $CHANGED_SPECS; do
+          echo "Auditing: $spec"
+          ldf audit --type spec-review --spec $spec --api --output json > audit-$spec.json || true
+        done
+      else
+        echo "Skipping automated audit (no spec changes or no API key)"
+      fi
+  artifacts:
+    paths:
+      - audit-*.json
+    when: always
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      when: manual
+  allow_failure: true
+
+# Deploy documentation (example)
+pages:
+  stage: coverage
+  image: python:${PYTHON_VERSION}
+  before_script:
+    - pip install mkdocs mkdocs-material
+  script:
+    - mkdocs build -d public
+  artifacts:
+    paths:
+      - public
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+  when: manual

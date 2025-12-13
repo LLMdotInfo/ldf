@@ -1,0 +1,5 @@
+version: "1.0"
+extends: core
+
+# No custom guardrails for this example
+# Using the 8 core guardrails from framework/guardrails/core.yaml

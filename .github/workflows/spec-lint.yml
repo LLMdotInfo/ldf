@@ -1,0 +1,282 @@
+name: Spec Linter CI
+
+on:
+  pull_request:
+    paths:
+      - '.ldf/**'
+      - 'ldf/**'
+      - 'framework/**'
+      - 'tests/**'
+  workflow_dispatch:
+
+jobs:
+  lint-specs:
+    runs-on: ubuntu-latest
+    name: Validate Spec Guardrail Coverage
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install LDF CLI
+        run: |
+          pip install pyyaml rich click
+          pip install -e .
+
+      - name: Run spec linter on all specs
+        id: lint
+        run: |
+          ldf lint --all --format ci > lint-output.txt 2>&1
+          echo "exit_code=$?" >> $GITHUB_OUTPUT
+        continue-on-error: true
+
+      - name: Display lint results
+        run: cat lint-output.txt
+
+      - name: Parse lint results and create annotations
+        if: steps.lint.outputs.exit_code != '0'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const output = fs.readFileSync('lint-output.txt', 'utf8');
+
+            // Parse output for errors and warnings
+            const lines = output.split('\n');
+            const annotations = [];
+
+            for (const line of lines) {
+              // Match error patterns from ldf lint --format ci
+              // Example: "✗ Error: admin-notes-system: Missing guardrail coverage matrix"
+              const errorMatch = line.match(/✗ Error: (.+?): (.+)/);
+              if (errorMatch) {
+                annotations.push({
+                  path: '.ldf/specs/' + errorMatch[1] + '/requirements.md',
+                  start_line: 1,
+                  end_line: 1,
+                  annotation_level: 'failure',
+                  message: errorMatch[2],
+                  title: 'Spec Linter Error'
+                });
+              }
+
+              // Match warning patterns
+              const warningMatch = line.match(/⚠ Warning: (.+?): (.+)/);
+              if (warningMatch) {
+                annotations.push({
+                  path: '.ldf/specs/' + warningMatch[1] + '/requirements.md',
+                  start_line: 1,
+                  end_line: 1,
+                  annotation_level: 'warning',
+                  message: warningMatch[2],
+                  title: 'Spec Linter Warning'
+                });
+              }
+            }
+
+            // Create check run with annotations
+            if (annotations.length > 0) {
+              await github.rest.checks.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                name: 'Spec Linter',
+                head_sha: context.payload.pull_request.head.sha,
+                status: 'completed',
+                conclusion: 'failure',
+                output: {
+                  title: 'Spec Linter Violations Found',
+                  summary: `Found ${annotations.length} issue(s) in spec files. Please fix before merging.`,
+                  annotations: annotations.slice(0, 50) // GitHub API limits to 50 annotations
+                }
+              });
+            }
+
+            // Comment on PR with summary
+            const comment = `## Spec Linter Results\n\n\`\`\`\n${output}\n\`\`\`\n\n` +
+              `**Status:** ${annotations.length === 0 ? '✅ PASS' : '❌ FAIL'}\n\n` +
+              `Please ensure all specs pass \`ldf lint --all\` before merging.`;
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.pull_request.number,
+              body: comment
+            });
+
+      - name: Fail if linter found issues
+        if: steps.lint.outputs.exit_code != '0'
+        run: |
+          echo "Spec linter found violations. Please fix before merging."
+          exit 1
+
+  check-answerpack-completeness:
+    runs-on: ubuntu-latest
+    name: Validate Answerpack Completeness
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check for template markers in answerpacks
+        run: |
+          found_issues=0
+
+          # Find all answerpack YAML files
+          for answerpack in $(find .ldf -name "*.yaml" -path "*/answerpacks/*" 2>/dev/null || true); do
+            echo "Checking $answerpack"
+
+            # Check for template markers
+            if grep -q "\[TODO\]\|\[PLACEHOLDER\]\|YOUR_\|REPLACE_ME\|feature_name: \"\"\|feature_name: null" "$answerpack"; then
+              echo "❌ FAIL: $answerpack contains template markers"
+              echo "  Please populate this answerpack before merging."
+              found_issues=1
+            else
+              echo "✅ PASS: $answerpack"
+            fi
+          done
+
+          if [ $found_issues -eq 1 ]; then
+            echo ""
+            echo "❌ One or more answerpacks contain template markers."
+            echo "Please complete all answerpacks before merging."
+            exit 1
+          fi
+
+          echo ""
+          echo "✅ All answerpacks are populated (or none found)."
+
+  check-guardrail-matrix:
+    runs-on: ubuntu-latest
+    name: Validate Guardrail Matrix Completeness
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install pyyaml
+
+      - name: Validate guardrail coverage matrices
+        run: |
+          # Script to dynamically count expected guardrails from config
+          python3 << 'EOF'
+          import os
+          import sys
+          import yaml
+          import re
+
+          def count_expected_guardrails():
+              """Count expected guardrails from framework/guardrails/core.yaml and any presets."""
+              count = 0
+
+              # Count core guardrails
+              core_path = 'framework/guardrails/core.yaml'
+              if os.path.exists(core_path):
+                  with open(core_path) as f:
+                      core = yaml.safe_load(f)
+                      if core and 'guardrails' in core:
+                          count = len(core['guardrails'])
+
+              # Check for project config to see if a preset is used
+              config_path = '.ldf/config.yaml'
+              if os.path.exists(config_path):
+                  with open(config_path) as f:
+                      config = yaml.safe_load(f)
+                      if config and 'guardrails' in config:
+                          preset = config['guardrails'].get('preset')
+                          if preset:
+                              preset_path = f'framework/guardrails/presets/{preset}.yaml'
+                              if os.path.exists(preset_path):
+                                  with open(preset_path) as pf:
+                                      preset_data = yaml.safe_load(pf)
+                                      if preset_data and 'guardrails' in preset_data:
+                                          count += len(preset_data['guardrails'])
+
+                          # Add custom guardrails
+                          custom = config['guardrails'].get('custom', [])
+                          if custom:
+                              count += len(custom)
+
+                          # Subtract disabled guardrails
+                          disabled = config['guardrails'].get('disabled', [])
+                          if disabled:
+                              count -= len(disabled)
+
+              return max(count, 8)  # Minimum 8 core guardrails
+
+          def count_matrix_rows(filepath):
+              """Count rows in the guardrail coverage matrix of a spec's requirements.md."""
+              if not os.path.exists(filepath):
+                  return 0
+
+              with open(filepath) as f:
+                  content = f.read()
+
+              # Find the Guardrail Coverage Matrix section
+              match = re.search(r'## Guardrail Coverage Matrix\s*\n(.*?)(?=\n##|\Z)', content, re.DOTALL)
+              if not match:
+                  return 0
+
+              matrix_section = match.group(1)
+
+              # Count table rows (exclude header and separator)
+              rows = [line for line in matrix_section.split('\n')
+                      if line.strip().startswith('|')
+                      and not line.strip().startswith('|---')
+                      and not line.strip().startswith('| Guardrail')
+                      and not line.strip().startswith('| #')
+                      and not line.strip().startswith('| ID')]
+
+              return len(rows)
+
+          def main():
+              expected = count_expected_guardrails()
+              found_issues = False
+
+              # Find all requirements.md files
+              specs_dir = '.ldf/specs'
+              if not os.path.exists(specs_dir):
+                  print(f"✅ No specs directory found at {specs_dir}")
+                  return 0
+
+              for spec_name in os.listdir(specs_dir):
+                  spec_path = os.path.join(specs_dir, spec_name)
+                  if not os.path.isdir(spec_path):
+                      continue
+
+                  req_file = os.path.join(spec_path, 'requirements.md')
+                  if not os.path.exists(req_file):
+                      continue
+
+                  actual = count_matrix_rows(req_file)
+
+                  if actual == 0:
+                      print(f"⚠ Warning: {spec_name} has no guardrail coverage matrix")
+                  elif actual != expected:
+                      print(f"❌ FAIL: {spec_name} has {actual} rows (expected {expected})")
+                      found_issues = True
+                  else:
+                      print(f"✅ PASS: {spec_name} has {actual} rows")
+
+              if found_issues:
+                  print("")
+                  print(f"❌ One or more specs have incomplete guardrail matrices.")
+                  print(f"All specs must have exactly {expected} rows (one per active guardrail).")
+                  return 1
+
+              print("")
+              print("✅ All specs have complete guardrail matrices.")
+              return 0
+
+          sys.exit(main())
+          EOF

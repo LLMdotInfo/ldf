@@ -1,0 +1,25 @@
+# LDF Configuration for TypeScript/Node Example
+version: "1.0"
+
+project:
+  name: express-api-example
+  description: Example Express API project with LDF specs
+
+specs:
+  directory: specs
+
+guardrails:
+  preset: core
+  custom: []
+
+question_packs:
+  - security
+  - testing
+  - api-design
+  - data-model
+
+coverage:
+  default_threshold: 80
+  critical_threshold: 90
+  critical_services:
+    - auth

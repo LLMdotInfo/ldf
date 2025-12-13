@@ -1,0 +1,26 @@
+version: "1.0"
+
+project:
+  name: "data-pipeline-service"
+  type: "api"
+  language: "go"
+
+guardrails:
+  preset: api-only
+  custom: []
+
+question_packs:
+  - core/security
+  - core/testing
+  - core/api-design
+  - core/data-model
+
+coverage:
+  default_threshold: 80
+  critical_threshold: 90
+  critical_services:
+    - pipeline
+    - processor
+
+lint:
+  strict: false
