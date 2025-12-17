@@ -11,34 +11,21 @@ from ldf.init import (
     _copy_question_packs,
     _create_claude_md,
     _print_summary,
-    _prompt_preset,
-    _prompt_question_packs,
-    _prompt_mcp_servers,
     FRAMEWORK_DIR,
-    DEFAULT_QUESTION_PACKS,
-    DOMAIN_QUESTION_PACKS,
-    PRESETS,
+)
+from ldf.utils.descriptions import (
+    get_core_packs,
+    get_domain_packs,
+    get_preset_recommended_packs,
 )
 
 
-class TestConstants:
-    """Test module constants."""
+class TestFrameworkDir:
+    """Test framework directory."""
 
     def test_framework_dir_exists(self):
         """Test that the framework directory exists."""
         assert FRAMEWORK_DIR.exists()
-
-    def test_default_question_packs(self):
-        """Test default question packs are defined."""
-        assert len(DEFAULT_QUESTION_PACKS) > 0
-        assert "security" in DEFAULT_QUESTION_PACKS
-        assert "testing" in DEFAULT_QUESTION_PACKS
-
-    def test_presets_defined(self):
-        """Test presets are defined."""
-        assert "saas" in PRESETS
-        assert "fintech" in PRESETS
-        assert "custom" in PRESETS
 
 
 class TestCreateDirectories:
@@ -145,7 +132,13 @@ class TestInitializeProject:
         """Test non-interactive init creates all files."""
         monkeypatch.chdir(tmp_path)
 
-        initialize_project("custom", [], [], non_interactive=True)
+        initialize_project(
+            project_path=tmp_path,
+            preset="custom",
+            question_packs=[],
+            mcp_servers=[],
+            non_interactive=True,
+        )
 
         assert (tmp_path / ".ldf").exists()
         assert (tmp_path / ".ldf" / "config.yaml").exists()
@@ -157,7 +150,13 @@ class TestInitializeProject:
         """Test that Claude commands are created."""
         monkeypatch.chdir(tmp_path)
 
-        initialize_project("custom", [], [], non_interactive=True)
+        initialize_project(
+            project_path=tmp_path,
+            preset="custom",
+            question_packs=[],
+            mcp_servers=[],
+            non_interactive=True,
+        )
 
         commands_dir = tmp_path / ".claude" / "commands"
         assert (commands_dir / "create-spec.md").exists()
@@ -168,7 +167,13 @@ class TestInitializeProject:
         """Test that custom preset uses default question packs."""
         monkeypatch.chdir(tmp_path)
 
-        initialize_project("custom", [], [], non_interactive=True)
+        initialize_project(
+            project_path=tmp_path,
+            preset="custom",
+            question_packs=None,
+            mcp_servers=None,
+            non_interactive=True,
+        )
 
         config_path = tmp_path / ".ldf" / "config.yaml"
         content = config_path.read_text()
@@ -185,7 +190,13 @@ class TestInitializeProject:
         # Mock Confirm.ask to return False
         monkeypatch.setattr("ldf.init.Confirm.ask", lambda *a, **kw: False)
 
-        initialize_project("custom", [], [], non_interactive=False)
+        initialize_project(
+            project_path=tmp_path,
+            preset="custom",
+            question_packs=[],
+            mcp_servers=[],
+            non_interactive=False,
+        )
 
         captured = capsys.readouterr()
         assert "Aborted" in captured.out
@@ -197,11 +208,23 @@ class TestInitializeProject:
         # Create existing .ldf directory
         (tmp_path / ".ldf").mkdir()
 
-        # Mock Confirm.ask to return True for overwrite, then defaults for others
+        # Mock Confirm.ask to return True for overwrite
         monkeypatch.setattr("ldf.init.Confirm.ask", lambda *a, **kw: True)
-        monkeypatch.setattr("ldf.init.Prompt.ask", lambda *a, **kw: "custom")
 
-        initialize_project("custom", [], [], non_interactive=False)
+        # Mock prompts module functions to avoid interactive prompts
+        monkeypatch.setattr("ldf.init.prompt_preset", lambda: "custom")
+        monkeypatch.setattr("ldf.init.prompt_question_packs", lambda preset: ["security"])
+        monkeypatch.setattr("ldf.init.prompt_mcp_servers", lambda: ["spec-inspector"])
+        monkeypatch.setattr("ldf.init.prompt_install_hooks", lambda: False)
+        monkeypatch.setattr("ldf.init.confirm_initialization", lambda *a, **kw: True)
+
+        initialize_project(
+            project_path=tmp_path,
+            preset=None,
+            question_packs=None,
+            mcp_servers=None,
+            non_interactive=False,
+        )
 
         assert (tmp_path / ".ldf" / "config.yaml").exists()
 
@@ -212,109 +235,57 @@ class TestInitializeProject:
         # Create git repo
         (tmp_path / ".git").mkdir()
 
-        initialize_project("custom", [], [], non_interactive=True, install_hooks=True)
+        initialize_project(
+            project_path=tmp_path,
+            preset="custom",
+            question_packs=[],
+            mcp_servers=[],
+            non_interactive=True,
+            install_hooks=True,
+        )
 
         assert (tmp_path / ".ldf").exists()
         assert (tmp_path / ".git" / "hooks" / "pre-commit").exists()
 
+    def test_creates_project_directory_if_not_exists(self, tmp_path: Path, monkeypatch):
+        """Test that project directory is created if it doesn't exist."""
+        new_project = tmp_path / "new-project"
 
-class TestPromptPreset:
-    """Tests for _prompt_preset function."""
+        initialize_project(
+            project_path=new_project,
+            preset="custom",
+            question_packs=[],
+            mcp_servers=[],
+            non_interactive=True,
+        )
 
-    def test_prompt_preset_returns_current_if_not_custom(self):
-        """Test that non-custom preset is returned as-is."""
-        result = _prompt_preset("saas")
-        assert result == "saas"
-
-    def test_prompt_preset_interactive_custom(self, monkeypatch, capsys):
-        """Test interactive preset selection."""
-        monkeypatch.setattr("ldf.init.Prompt.ask", lambda *a, **kw: "fintech")
-
-        result = _prompt_preset("custom")
-
-        assert result == "fintech"
-        captured = capsys.readouterr()
-        assert "guardrail preset" in captured.out
-
-    def test_prompt_preset_interactive_empty(self, monkeypatch, capsys):
-        """Test interactive preset selection with empty current."""
-        monkeypatch.setattr("ldf.init.Prompt.ask", lambda *a, **kw: "saas")
-
-        result = _prompt_preset("")
-
-        assert result == "saas"
+        assert new_project.exists()
+        assert (new_project / ".ldf").exists()
 
 
-class TestPromptQuestionPacks:
-    """Tests for _prompt_question_packs function."""
+class TestDescriptionsIntegration:
+    """Tests for descriptions module integration with init."""
 
-    def test_prompt_packs_returns_current_if_set(self):
-        """Test that current packs are returned as-is."""
-        result = _prompt_question_packs(["security", "testing"])
-        assert result == ["security", "testing"]
+    def test_core_packs_defined(self):
+        """Test that core packs are defined in descriptions."""
+        core_packs = get_core_packs()
+        assert len(core_packs) > 0
+        assert "security" in core_packs
+        assert "testing" in core_packs
 
-    def test_prompt_packs_include_core(self, monkeypatch, capsys):
-        """Test including all core packs."""
-        # Return True for "Include all core packs?" and False for all domain packs
-        monkeypatch.setattr("ldf.init.Confirm.ask", lambda *a, **kw: "core" in a[0] if a else False)
+    def test_domain_packs_defined(self):
+        """Test that domain packs are defined in descriptions."""
+        domain_packs = get_domain_packs()
+        assert len(domain_packs) > 0
+        assert "billing" in domain_packs
+        assert "multi-tenancy" in domain_packs
 
-        result = _prompt_question_packs([])
-
-        # Should have all default packs
-        for pack in DEFAULT_QUESTION_PACKS:
-            assert pack in result
-        captured = capsys.readouterr()
-        assert "question packs" in captured.out
-
-    def test_prompt_packs_exclude_core_include_domain(self, monkeypatch):
-        """Test excluding core but including a domain pack."""
-        call_count = [0]
-
-        def mock_confirm(*args, **kwargs):
-            call_count[0] += 1
-            # First call is for core packs - return False
-            if call_count[0] == 1:
-                return False
-            # Return True for first domain pack
-            if call_count[0] == 2:
-                return True
-            return False
-
-        monkeypatch.setattr("ldf.init.Confirm.ask", mock_confirm)
-
-        result = _prompt_question_packs([])
-
-        # Should have just the first domain pack
-        assert DOMAIN_QUESTION_PACKS[0] in result
-        assert "security" not in result  # Core pack should not be included
-
-
-class TestPromptMcpServers:
-    """Tests for _prompt_mcp_servers function."""
-
-    def test_prompt_servers_returns_current_if_set(self):
-        """Test that current servers are returned as-is."""
-        result = _prompt_mcp_servers(["spec-inspector"])
-        assert result == ["spec-inspector"]
-
-    def test_prompt_servers_include_all(self, monkeypatch, capsys):
-        """Test including all servers."""
-        monkeypatch.setattr("ldf.init.Confirm.ask", lambda *a, **kw: True)
-
-        result = _prompt_mcp_servers([])
-
-        assert "spec-inspector" in result
-        assert "coverage-reporter" in result
-        captured = capsys.readouterr()
-        assert "MCP servers" in captured.out
-
-    def test_prompt_servers_exclude_all(self, monkeypatch):
-        """Test excluding all servers."""
-        monkeypatch.setattr("ldf.init.Confirm.ask", lambda *a, **kw: False)
-
-        result = _prompt_mcp_servers([])
-
-        assert result == []
+    def test_preset_recommendations_exist(self):
+        """Test that preset recommendations are defined."""
+        saas_packs = get_preset_recommended_packs("saas")
+        assert len(saas_packs) > 0
+        # SaaS should recommend multi-tenancy
+        assert "multi-tenancy" in saas_packs
 
 
 class TestCopyQuestionPacks:
@@ -410,12 +381,46 @@ class TestInitializeProjectInteractive:
         """Test that interactive mode calls prompt functions."""
         monkeypatch.chdir(tmp_path)
 
+        # Track which prompts were called
+        prompts_called = []
+
+        def mock_prompt_preset():
+            prompts_called.append("preset")
+            return "custom"
+
+        def mock_prompt_question_packs(preset):
+            prompts_called.append("question_packs")
+            return ["security"]
+
+        def mock_prompt_mcp_servers():
+            prompts_called.append("mcp_servers")
+            return ["spec-inspector"]
+
+        def mock_prompt_install_hooks():
+            prompts_called.append("install_hooks")
+            return False
+
+        def mock_confirm_initialization(*args, **kwargs):
+            prompts_called.append("confirm")
+            return True
+
         # Mock all prompts
-        monkeypatch.setattr("ldf.init.Confirm.ask", lambda *a, **kw: True)
-        monkeypatch.setattr("ldf.init.Prompt.ask", lambda *a, **kw: "custom")
+        monkeypatch.setattr("ldf.init.prompt_preset", mock_prompt_preset)
+        monkeypatch.setattr("ldf.init.prompt_question_packs", mock_prompt_question_packs)
+        monkeypatch.setattr("ldf.init.prompt_mcp_servers", mock_prompt_mcp_servers)
+        monkeypatch.setattr("ldf.init.prompt_install_hooks", mock_prompt_install_hooks)
+        monkeypatch.setattr("ldf.init.confirm_initialization", mock_confirm_initialization)
 
-        initialize_project("custom", [], [], non_interactive=False)
+        initialize_project(
+            project_path=tmp_path,
+            preset=None,
+            question_packs=None,
+            mcp_servers=None,
+            non_interactive=False,
+        )
 
-        captured = capsys.readouterr()
-        # Should show interactive prompts
-        assert "guardrail preset" in captured.out or "MCP servers" in captured.out or "question packs" in captured.out
+        # Should have called all prompt functions
+        assert "preset" in prompts_called
+        assert "question_packs" in prompts_called
+        assert "mcp_servers" in prompts_called
+        assert "confirm" in prompts_called

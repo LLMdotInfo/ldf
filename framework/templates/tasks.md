@@ -26,29 +26,38 @@ Before implementing each task, verify applicable guardrails:
 **Note:** Both 2-level (1.1) and 3-level (1.1.1) task IDs are supported.
 
 ## Phase 1: Foundation & Setup
-- [ ] **Task 1.1:** Project setup
-  - [ ] Create directory structure
-  - [ ] Install dependencies
-  - [ ] Configure environment
+
+<!-- Example: Completed and in-progress tasks shown for reference -->
+
+- [x] **Task 1.1:** Project setup
+  - [x] Create directory structure
+  - [x] Install dependencies
+  - [x] Configure environment
   - **Dependencies:** None
   - **Tests:** N/A (setup task)
+  - **Completed:** 2025-01-10 | **Commit:** `abc1234`
 
-- [ ] **Task 1.2:** Database schema
-  - [ ] Create migration file
-  - [ ] Define models
-  - [ ] Add indexes
-  - [ ] Write migration tests
+- [x] **Task 1.2:** Database schema
+  - [x] Create migration file
+  - [x] Define models
+  - [x] Add indexes
+  - [x] Write migration tests
   - **Dependencies:** Task 1.1
-  - **Tests:** Migration up/down tests
+  - **Tests:** Migration up/down tests (✅ passing)
+  - **Completed:** 2025-01-11 | **Commit:** `def5678`
 
 ## Phase 2: Core Business Logic
+
+<!-- Example: In-progress task with some subtasks completed -->
+
 - [ ] **Task 2.1:** Implement {ServiceName}
-  - [ ] Create service class
-  - [ ] Implement core methods
-  - [ ] Add error handling
+  - [x] Create service class
+  - [x] Implement core methods
+  - [ ] Add error handling           <!-- ⬅️ Currently working on this -->
   - [ ] Write unit tests
   - **Dependencies:** Task 1.2
   - **Tests:** Unit tests with mocked dependencies (≥80% coverage)
+  - **Status:** IN PROGRESS
 
 - [ ] **Task 2.2:** Implement {HelperService}
   - [ ] Create helper class

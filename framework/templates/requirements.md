@@ -1,7 +1,11 @@
 # {Feature Name} - Requirements
 
+<!-- Replace {Feature Name} with your feature name, e.g., "user-authentication" -->
+
 ## Overview
-[Brief description of feature and its business purpose]
+
+<!-- Example: User authentication system with email/password login and optional MFA support.
+     Include the main purpose and 2-3 key capabilities. Keep it to 2-3 sentences. -->
 
 ## Question-Pack Answers
 **Domains covered:** [List applicable domains from: security, testing, api-design, data-model, billing, multi-tenancy, provisioning, webhooks]
@@ -37,24 +41,30 @@ Add rows for any preset-specific guardrails (saas, fintech, healthcare).
 
 ## User Stories
 
+<!-- Example user story structure. The WHEN/THE SYSTEM SHALL format (EARS syntax)
+     provides unambiguous requirements. Add as many user stories as needed. -->
+
 ### US-1: {Story Title}
-**As a** [role]
-**I want to** [action]
-**So that** [benefit]
+<!-- Example title: "User Login" -->
 
-**WHEN** [condition/event]
-**THE SYSTEM SHALL** [expected behavior]
+**As a** [role]          <!-- e.g., "registered user" -->
+**I want to** [action]   <!-- e.g., "log in with my email and password" -->
+**So that** [benefit]    <!-- e.g., "I can access my account" -->
 
-**WHEN** [error condition]
-**THE SYSTEM SHALL** [error handling behavior]
+**WHEN** [condition/event]           <!-- e.g., "a valid email and password are submitted" -->
+**THE SYSTEM SHALL** [expected behavior]  <!-- e.g., "return JWT tokens and set HttpOnly cookies" -->
+
+**WHEN** [error condition]           <!-- e.g., "invalid credentials are submitted" -->
+**THE SYSTEM SHALL** [error handling behavior]  <!-- e.g., "return 401 with generic error message" -->
 
 **Acceptance Criteria:**
-- [ ] Criterion 1
-- [ ] Criterion 2
-- [ ] Criterion 3
+<!-- Specific, testable criteria. Each should map to at least one test case. -->
+- [ ] Criterion 1  <!-- e.g., "AC-1.1: Valid credentials return 200 with user data" -->
+- [ ] Criterion 2  <!-- e.g., "AC-1.2: Invalid password returns 401 Unauthorized" -->
+- [ ] Criterion 3  <!-- e.g., "AC-1.3: Account locks after 5 failed attempts" -->
 
 ### US-2: {Story Title}
-[Repeat format for additional stories]
+<!-- Repeat format for additional stories -->
 
 ## Non-Functional Requirements
 

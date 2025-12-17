@@ -1,5 +1,7 @@
 """LDF CLI - Command line interface for the LLM Development Framework."""
 
+from pathlib import Path
+
 import click
 
 from ldf import __version__
@@ -25,9 +27,15 @@ def main(ctx, verbose):
 
 @main.command()
 @click.option(
+    "--path",
+    "-p",
+    type=click.Path(),
+    help="Project directory path (created if doesn't exist)",
+)
+@click.option(
     "--preset",
     type=click.Choice(["saas", "fintech", "healthcare", "api-only", "custom"]),
-    default="custom",
+    default=None,
     help="Guardrail preset to use",
 )
 @click.option(
@@ -40,35 +48,55 @@ def main(ctx, verbose):
     "--mcp-servers",
     "-m",
     multiple=True,
-    default=["spec-inspector", "coverage-reporter"],
     help="MCP servers to enable",
 )
 @click.option(
-    "-y", "--yes",
+    "-y",
+    "--yes",
     is_flag=True,
     help="Non-interactive mode, accept defaults",
 )
 @click.option(
     "--hooks/--no-hooks",
-    default=False,
+    default=None,
     help="Install pre-commit hooks for spec validation",
 )
-def init(preset: str, question_packs: tuple, mcp_servers: tuple, yes: bool, hooks: bool):
-    """Initialize LDF in the current project.
+def init(
+    path: str | None,
+    preset: str | None,
+    question_packs: tuple,
+    mcp_servers: tuple,
+    yes: bool,
+    hooks: bool | None,
+):
+    """Initialize LDF in a project directory.
 
     Creates .ldf/ directory with configuration, guardrails, and templates.
     Also generates CLAUDE.md for AI assistant integration.
 
-    Use --hooks to also install pre-commit hooks for spec validation.
+    If --path is not provided, prompts for project location interactively.
+    Use -y/--yes for non-interactive mode with defaults.
+
+    Examples:
+        ldf init                            # Interactive setup
+        ldf init --path ./my-project        # Create project at path
+        ldf init --preset saas              # Use SaaS preset
+        ldf init -y                         # Non-interactive with defaults
+        ldf init --hooks                    # Also install pre-commit hooks
     """
+    from pathlib import Path as PathLib
+
     from ldf.init import initialize_project
 
+    project_path = PathLib(path) if path else None
+
     initialize_project(
-        preset,
-        list(question_packs),
-        list(mcp_servers),
+        project_path=project_path,
+        preset=preset,
+        question_packs=list(question_packs) if question_packs else None,
+        mcp_servers=list(mcp_servers) if mcp_servers else None,
         non_interactive=yes,
-        install_hooks=hooks,
+        install_hooks=hooks if hooks is not None else False,
     )
 
 
@@ -204,6 +232,61 @@ def audit(
     from ldf.audit import run_audit
 
     run_audit(audit_type, import_file, api, include_secrets, yes, spec_name)
+
+
+@main.command("mcp-config")
+@click.option(
+    "--root",
+    "-r",
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
+    default=None,
+    help="Project root directory (defaults to current directory)",
+)
+@click.option(
+    "--server",
+    "-s",
+    multiple=True,
+    help="Include specific MCP server(s) (can be used multiple times)",
+)
+@click.option(
+    "--format",
+    "-f",
+    "output_format",
+    type=click.Choice(["claude", "json"]),
+    default="claude",
+    help="Output format: claude (mcpServers wrapper) or json (raw)",
+)
+def mcp_config(root: Path | None, server: tuple, output_format: str):
+    """Generate MCP server configuration for AI assistants.
+
+    Outputs JSON configuration pointing to LDF's MCP servers with paths
+    configured for the specified project directory.
+
+    The 'claude' format (default) outputs JSON suitable for .claude/mcp.json:
+
+    \\b
+    {
+      "mcpServers": {
+        "spec-inspector": { ... },
+        "coverage-reporter": { ... }
+      }
+    }
+
+    The 'json' format outputs just the server configurations without wrapper.
+
+    Examples:
+        ldf mcp-config                    # Config for current directory
+        ldf mcp-config -r ./my-project    # Config for specific project
+        ldf mcp-config -s spec-inspector  # Only spec-inspector server
+        ldf mcp-config --format json      # Raw JSON output
+
+    To create .claude/mcp.json:
+        mkdir -p .claude && ldf mcp-config > .claude/mcp.json
+    """
+    from ldf.mcp_config import print_mcp_config
+
+    servers = list(server) if server else None
+    print_mcp_config(root, servers, output_format)
 
 
 @main.command()

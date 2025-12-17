@@ -70,9 +70,17 @@ Type these prefixes in markdown files to insert templates:
    - Type "Install from VSIX"
    - Select the generated `.vsix` file
 
-### From Marketplace (Coming Soon)
+### From Marketplace
 
-Search for "LDF" in the VS Code Extensions marketplace.
+1. Open VS Code
+2. Go to Extensions (Cmd+Shift+X / Ctrl+Shift+X)
+3. Search for "LDF Spec-Driven Development"
+4. Click Install
+
+Or install from command line:
+```bash
+code --install-extension llmdotinfo.ldf-vscode
+```
 
 ## Configuration
 

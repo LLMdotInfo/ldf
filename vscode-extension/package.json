@@ -3,8 +3,13 @@
   "displayName": "LDF - Spec-Driven Development",
   "description": "Visual tools for LDF (LLM Development Framework) spec-driven development workflow",
   "version": "0.1.0",
-  "publisher": "ldf",
+  "publisher": "llmdotinfo",
   "license": "MIT",
+  "icon": "images/ldf-icon.png",
+  "galleryBanner": {
+    "color": "#1e1e1e",
+    "theme": "dark"
+  },
   "repository": {
     "type": "git",
     "url": "https://github.com/LLMdotInfo/ldf"
@@ -22,7 +27,9 @@
     "spec-driven",
     "requirements",
     "guardrails",
-    "development-workflow"
+    "development-workflow",
+    "ai-assisted",
+    "llm"
   ],
   "activationEvents": [
     "workspaceContains:.ldf/config.yaml",

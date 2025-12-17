@@ -1,3 +1,6 @@
+<!-- TEMPLATE EXAMPLE: This is a reference implementation showing how to complete
+     a requirements document. Modify for your specific project needs. -->
+
 # data-pipeline - Requirements
 
 ## Overview
@@ -124,14 +127,14 @@ A configurable data pipeline service that processes incoming data through a seri
 
 | Guardrail | Requirements | Design | Tasks/Tests | Owner | Status |
 |-----------|--------------|--------|-------------|-------|--------|
-| 1. Testing Coverage | [US-1..4] | [S4.1] | [T-4.1..3] | Dev | TODO |
-| 2. Security Basics | [US-1..4] | [S2.1] | [T-2.1] | Dev | TODO |
-| 3. Error Handling | [US-1..4] | [S3.2] | [T-3.3] | Dev | TODO |
-| 4. Logging & Observability | [US-2, US-3] | [S3.3] | [T-3.4] | Dev | TODO |
-| 5. API Design | [US-1..4] | [S3.1] | [T-1.1] | Dev | TODO |
-| 6. Data Validation | [US-1, US-2] | [S2.2] | [T-2.2] | Dev | TODO |
-| 7. Database Migrations | [All] | [S1.2] | [T-1.2] | Dev | TODO |
-| 8. Documentation | [All] | [S4.2] | [T-5.1] | Dev | TODO |
+| 1. Testing Coverage | [US-1..4] | [S4.1] | [T-4.1..3] | @pipeline-team | DONE |
+| 2. Security Basics | [US-1..4] | [S2.1] | [T-2.1] | @pipeline-team | DONE |
+| 3. Error Handling | [US-1..4] | [S3.2] | [T-3.3] | @pipeline-team | IN PROGRESS |
+| 4. Logging & Observability | [US-2, US-3] | [S3.3] | [T-3.4] | @sre-team | DONE |
+| 5. API Design | [US-1..4] | [S3.1] | [T-1.1] | @pipeline-team | DONE |
+| 6. Data Validation | [US-1, US-2] | [S2.2] | [T-2.2] | @pipeline-team | DONE |
+| 7. Database Migrations | [All] | [S1.2] | [T-1.2] | @pipeline-team | DONE |
+| 8. Documentation | [All] | [S4.2] | [T-5.1] | @docs-team | N/A (auto-generated from OpenAPI) |
 
 ## Dependencies
 

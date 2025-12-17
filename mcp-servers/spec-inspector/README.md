@@ -11,14 +11,21 @@ pip install -r requirements.txt
 
 ## Configuration
 
-Add to your MCP settings (e.g., `.claude/mcp.json` for Claude Code):
+The easiest way to configure is using the LDF CLI:
+
+```bash
+# Generate MCP configuration for your project
+mkdir -p .claude && ldf mcp-config > .claude/mcp.json
+```
+
+Or manually add to your MCP settings (e.g., `.claude/mcp.json` for Claude Code):
 
 ```json
 {
   "mcpServers": {
     "spec-inspector": {
       "command": "python",
-      "args": ["mcp-servers/spec-inspector/server.py"],
+      "args": ["/path/to/ldf/mcp-servers/spec-inspector/server.py"],
       "env": {
         "LDF_ROOT": "/path/to/your/project",
         "SPECS_DIR": ".ldf/specs"

@@ -1,43 +1,66 @@
 """LDF project initialization."""
 
-import os
 import shutil
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+import questionary
 import yaml
 from rich.panel import Panel
-from rich.prompt import Confirm, Prompt
-from rich.table import Table
+from rich.prompt import Confirm
 
+from ldf.prompts import (
+    confirm_initialization,
+    prompt_install_hooks,
+    prompt_mcp_servers,
+    prompt_preset,
+    prompt_project_path,
+    prompt_question_packs,
+)
 from ldf.utils.console import console
+from ldf.utils.descriptions import get_all_mcp_servers, get_core_packs, is_mcp_server_default
 
 # Framework paths (relative to package)
 FRAMEWORK_DIR = Path(__file__).parent.parent / "framework"
 
-DEFAULT_QUESTION_PACKS = ["security", "testing", "api-design", "data-model"]
-DOMAIN_QUESTION_PACKS = ["billing", "multi-tenancy", "provisioning", "webhooks"]
-PRESETS = ["saas", "fintech", "healthcare", "api-only", "custom"]
-
 
 def initialize_project(
-    preset: str,
-    question_packs: list[str],
-    mcp_servers: list[str],
+    project_path: Path | None = None,
+    preset: str | None = None,
+    question_packs: list[str] | None = None,
+    mcp_servers: list[str] | None = None,
     non_interactive: bool = False,
     install_hooks: bool = False,
 ) -> None:
-    """Initialize LDF in the current project directory.
+    """Initialize LDF in the specified or current project directory.
 
     Args:
+        project_path: Project directory path (created if doesn't exist).
+            If None, prompts interactively or uses cwd in non-interactive mode.
         preset: Guardrail preset (saas, fintech, healthcare, api-only, custom)
         question_packs: List of question packs to include
         mcp_servers: List of MCP servers to enable
         non_interactive: Skip prompts and use defaults
         install_hooks: Whether to install pre-commit hooks
     """
-    project_root = Path.cwd()
+    # Step 1: Determine project path
+    if project_path is None and not non_interactive:
+        try:
+            project_path = prompt_project_path()
+        except KeyboardInterrupt:
+            console.print("\n[red]Aborted[/red]")
+            return
+    elif project_path is None:
+        project_path = Path.cwd()
+
+    project_root = Path(project_path).resolve()
+
+    # Step 2: Create directory if needed
+    if not project_root.exists():
+        project_root.mkdir(parents=True)
+        console.print(f"[green]Created directory:[/green] {project_root}")
+
     ldf_dir = project_root / ".ldf"
 
     # Check if already initialized
@@ -46,22 +69,53 @@ def initialize_project(
             console.print("[red]Aborted[/red]")
             return
 
-    console.print(Panel.fit(
-        f"[bold blue]Initializing LDF in {project_root.name}[/bold blue]",
-        title="LDF Setup",
-    ))
+    console.print(
+        Panel.fit(
+            f"[bold blue]Initializing LDF in {project_root.name}[/bold blue]",
+            title="LDF Setup",
+        )
+    )
 
-    # Interactive configuration
+    # Step 3: Interactive configuration
     if not non_interactive:
-        preset = _prompt_preset(preset)
-        question_packs = _prompt_question_packs(question_packs)
-        mcp_servers = _prompt_mcp_servers(mcp_servers)
+        try:
+            # Preset selection
+            if preset is None:
+                preset = prompt_preset()
 
-    # Ensure defaults
+            # Question packs (with preset-based recommendations)
+            if question_packs is None:
+                question_packs = prompt_question_packs(preset)
+
+            # MCP servers
+            if mcp_servers is None:
+                mcp_servers = prompt_mcp_servers()
+
+            # Hooks prompt
+            if not install_hooks:
+                install_hooks = prompt_install_hooks()
+
+            # Confirmation
+            if not confirm_initialization(
+                project_root, preset, question_packs, mcp_servers, install_hooks
+            ):
+                console.print("\n[red]Aborted[/red]")
+                return
+
+        except KeyboardInterrupt:
+            console.print("\n[red]Aborted[/red]")
+            return
+
+    # Ensure defaults for non-interactive mode
+    if preset is None:
+        preset = "custom"
     if not question_packs:
-        question_packs = DEFAULT_QUESTION_PACKS
-    if not mcp_servers:
-        mcp_servers = ["spec-inspector", "coverage-reporter"]
+        question_packs = list(get_core_packs())
+    if mcp_servers is None:
+        # Get default MCP servers from descriptions
+        mcp_servers = [s for s in get_all_mcp_servers() if is_mcp_server_default(s)]
+        if not mcp_servers:
+            mcp_servers = ["spec-inspector", "coverage-reporter"]
 
     console.print()
 
@@ -102,69 +156,6 @@ def initialize_project(
 
     # Summary
     _print_summary(project_root, preset, question_packs, mcp_servers, hooks_installed)
-
-
-def _prompt_preset(current: str) -> str:
-    """Prompt user to select a guardrail preset."""
-    if current and current != "custom":
-        return current
-
-    console.print("\n[bold]Select a guardrail preset:[/bold]")
-    table = Table(show_header=True, header_style="bold")
-    table.add_column("Preset", style="cyan")
-    table.add_column("Description")
-    table.add_column("Extra Guardrails")
-
-    table.add_row("saas", "Multi-tenant SaaS applications", "+5 (RLS, tenancy, billing, audit, export)")
-    table.add_row("fintech", "Financial applications", "+7 (ledger, precision, idempotency, audit, compliance)")
-    table.add_row("healthcare", "HIPAA-compliant healthcare", "+6 (HIPAA, PHI, access logs, encryption, consent)")
-    table.add_row("api-only", "Pure API services", "+4 (versioning, rate limits, webhooks, API keys)")
-    table.add_row("custom", "Core guardrails only", "+0 (add your own)")
-
-    console.print(table)
-
-    return Prompt.ask(
-        "\nChoose preset",
-        choices=PRESETS,
-        default="custom",
-    )
-
-
-def _prompt_question_packs(current: list[str]) -> list[str]:
-    """Prompt user to select question packs."""
-    if current:
-        return current
-
-    console.print("\n[bold]Select question packs to include:[/bold]")
-    console.print("  Core packs (recommended):", ", ".join(DEFAULT_QUESTION_PACKS))
-    console.print("  Domain packs (optional):", ", ".join(DOMAIN_QUESTION_PACKS))
-
-    # Core packs
-    include_core = Confirm.ask("\nInclude all core packs?", default=True)
-    selected = list(DEFAULT_QUESTION_PACKS) if include_core else []
-
-    # Domain packs
-    for pack in DOMAIN_QUESTION_PACKS:
-        if Confirm.ask(f"Include [cyan]{pack}[/cyan] pack?", default=False):
-            selected.append(pack)
-
-    return selected
-
-
-def _prompt_mcp_servers(current: list[str]) -> list[str]:
-    """Prompt user to select MCP servers."""
-    if current:
-        return list(current)
-
-    console.print("\n[bold]MCP servers for real-time validation:[/bold]")
-
-    servers = []
-    if Confirm.ask("Enable [cyan]spec-inspector[/cyan] (spec validation)?", default=True):
-        servers.append("spec-inspector")
-    if Confirm.ask("Enable [cyan]coverage-reporter[/cyan] (test coverage)?", default=True):
-        servers.append("coverage-reporter")
-
-    return servers
 
 
 def _create_directories(ldf_dir: Path) -> None:

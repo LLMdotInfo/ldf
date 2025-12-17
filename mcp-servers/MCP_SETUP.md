@@ -112,39 +112,44 @@ Available tools:
 | `get_untested_functions` | List uncovered lines |
 | `validate_coverage` | Check if coverage meets thresholds |
 
+## Quick Configuration with CLI
+
+The easiest way to configure MCP servers is using the LDF CLI:
+
+```bash
+# Generate MCP configuration for current project
+mkdir -p .claude && ldf mcp-config > .claude/mcp.json
+
+# Generate for a different project directory
+ldf mcp-config -r /path/to/my-project > .claude/mcp.json
+
+# Only include specific servers
+ldf mcp-config -s spec-inspector > .claude/mcp.json
+```
+
 ## Advanced Configuration
 
-### Using Absolute Paths
+### Custom Project Root
 
-For projects with non-standard layouts:
+For projects in different locations:
 
-```json
-{
-  "mcpServers": {
-    "spec-inspector": {
-      "command": "python",
-      "args": ["/path/to/ldf/mcp-servers/spec-inspector/server.py"],
-      "env": {
-        "LDF_ROOT": "/path/to/my-project",
-        "SPECS_DIR": ".ldf/specs"
-      }
-    }
-  }
-}
+```bash
+# Generate config pointing to a specific project
+ldf mcp-config -r /path/to/my-project > .claude/mcp.json
 ```
 
 ### Using Virtual Environments
 
-If using a venv:
+If using a venv, you may want to modify the generated config to use your project's Python:
 
 ```json
 {
   "mcpServers": {
     "spec-inspector": {
       "command": "/path/to/my-project/.venv/bin/python",
-      "args": ["mcp-servers/spec-inspector/server.py"],
+      "args": ["..."],
       "env": {
-        "LDF_ROOT": "."
+        "LDF_ROOT": "/path/to/my-project"
       }
     }
   }

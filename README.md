@@ -39,18 +39,29 @@ pip install -e .
 ### 2. Initialize Your Project
 
 ```bash
-cd your-project
-ldf init --preset saas
+# Interactive setup (recommended for first-time users)
+ldf init
+
+# Or non-interactive with preset
+ldf init --path ./my-project --preset saas -y
 ```
+
+The interactive CLI guides you through:
+- **Project path** - Where to create your project
+- **Preset selection** - Choose domain-specific guardrails
+- **Question packs** - Pre-selected based on preset, customize as needed
+- **MCP servers** - AI integration tools
 
 This creates:
 ```
-your-project/
+my-project/
 ├── .ldf/
 │   ├── config.yaml           # Project configuration
 │   ├── guardrails.yaml       # Active guardrails (8 core + preset)
 │   ├── question-packs/       # Domain question templates
+│   ├── answerpacks/          # Design decision storage
 │   └── specs/                # Your feature specifications
+├── .claude/commands/         # Slash commands for AI
 └── CLAUDE.md                 # AI assistant instructions
 ```
 
@@ -148,16 +159,8 @@ LDF includes MCP (Model Context Protocol) servers for real-time validation:
 **Token savings:** 90% reduction compared to file reads.
 
 ```bash
-# Configure MCP servers (example for Claude Code)
-# Add to your .claude/mcp.json:
-{
-  "mcpServers": {
-    "spec-inspector": {
-      "command": "python",
-      "args": ["/path/to/ldf/mcp-servers/spec-inspector/server.py"]
-    }
-  }
-}
+# Generate MCP configuration for your project
+mkdir -p .claude && ldf mcp-config > .claude/mcp.json
 ```
 
 ### Multi-Agent Audit

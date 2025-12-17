@@ -23,29 +23,80 @@ ldf --version
 
 ### 2. Initialize a Project
 
+The easiest way to get started is with the interactive setup:
+
 ```bash
-cd your-project
 ldf init
+```
+
+The CLI guides you through:
+
+1. **Project path** - Where to create your project (default: `./my-project`)
+2. **Preset selection** - Choose guardrails for your domain:
+   - `saas` - Multi-tenant apps with RLS, tenant isolation, billing
+   - `fintech` - Financial apps with ledger accuracy, compliance
+   - `healthcare` - HIPAA-compliant with PHI handling
+   - `api-only` - Developer APIs with rate limits, versioning
+   - `custom` - Core guardrails only
+3. **Question packs** - Core packs always included, domain packs pre-selected based on preset
+4. **MCP servers** - AI integration (spec-inspector, coverage-reporter)
+5. **Pre-commit hooks** - Optional validation on commits
+
+```
+$ ldf init
+
+Enter project path: ./my-saas-app
+
+Select guardrail preset:
+❯ saas - Multi-tenant SaaS applications (+5 guardrails)
+  fintech - Financial applications (+7 guardrails)
+  healthcare - HIPAA-compliant (+6 guardrails)
+  api-only - Pure API services (+4 guardrails)
+  custom - Core guardrails only
+
+Core packs (always included):
+  ✓ security - Authentication, authorization, secrets
+  ✓ testing - Coverage requirements, testing strategies
+  ✓ api-design - REST patterns, versioning, errors
+  ✓ data-model - Database schema, migrations
+
+Select domain packs: [space to toggle, enter to confirm]
+  [x] billing - Payment processing, subscriptions
+  [x] multi-tenancy - RLS, tenant isolation
+  [ ] provisioning - Async jobs, queues
+  [ ] webhooks - Event delivery, signatures
+
+✓ Created .ldf/ directory structure
+✓ Created CLAUDE.md
 ```
 
 This creates:
 ```
-.ldf/
-├── config.yaml          # Project configuration
-├── specs/               # Feature specifications
-└── answerpacks/         # Question-pack answers
+my-saas-app/
+├── .ldf/
+│   ├── config.yaml          # Project configuration
+│   ├── guardrails.yaml      # Active guardrails
+│   ├── specs/               # Feature specifications
+│   ├── answerpacks/         # Question-pack answers
+│   ├── templates/           # Spec templates
+│   └── macros/              # Enforcement macros
+├── .claude/commands/        # Slash commands
+└── CLAUDE.md                # AI assistant instructions
 ```
 
-### Interactive Setup
+### Non-Interactive Setup
 
-The `ldf init` command asks:
-1. **Preset**: Choose guardrail preset (core, saas, fintech, healthcare, api-only)
-2. **Question-packs**: Select domain-specific question packs
-3. **MCP servers**: Configure AI assistant integration
+For CI/CD or scripting:
 
-For non-interactive setup:
 ```bash
-ldf init --preset saas -y
+# Create project at specific path with preset
+ldf init --path ./my-project --preset saas -y
+
+# Use defaults for everything
+ldf init -y
+
+# Also install pre-commit hooks
+ldf init --preset saas --hooks -y
 ```
 
 ## Your First Spec
@@ -250,29 +301,19 @@ Install the LDF VS Code extension for:
 
 ### MCP Servers for AI Assistants
 
-Configure MCP servers in `.claude/mcp.json`:
+Generate and configure MCP servers using the LDF CLI:
 
-```json
-{
-  "mcpServers": {
-    "spec-inspector": {
-      "command": "python",
-      "args": ["path/to/ldf/mcp-servers/spec-inspector/server.py"],
-      "env": {
-        "LDF_ROOT": ".",
-        "SPECS_DIR": ".ldf/specs"
-      }
-    },
-    "coverage-reporter": {
-      "command": "python",
-      "args": ["path/to/ldf/mcp-servers/coverage-reporter/server.py"],
-      "env": {
-        "PROJECT_ROOT": "."
-      }
-    }
-  }
-}
+```bash
+# Generate MCP configuration for your project
+mkdir -p .claude && ldf mcp-config > .claude/mcp.json
 ```
+
+This creates `.claude/mcp.json` with the correct paths to LDF's MCP servers configured for your project. The servers provide:
+
+- **spec-inspector**: Query spec status, guardrail coverage, task progress
+- **coverage-reporter**: Test coverage metrics per service/guardrail
+
+See [MCP Setup Guide](../mcp-servers/MCP_SETUP.md) for advanced configuration options.
 
 ## Workflow Summary
 
@@ -298,7 +339,13 @@ Set up automated spec validation in your CI pipeline to catch issues before merg
 
 ```bash
 mkdir -p .github/workflows
-cp path/to/ldf/integrations/ci-cd/github-actions.yaml .github/workflows/ldf.yaml
+cp $(pip show ldf | grep Location | cut -d' ' -f2)/../integrations/ci-cd/github-actions.yaml .github/workflows/ldf.yaml
+```
+
+Or copy from the LDF repository:
+```bash
+# If you cloned LDF
+cp /path/to/ldf/integrations/ci-cd/github-actions.yaml .github/workflows/ldf.yaml
 ```
 
 This enables:
@@ -310,7 +357,8 @@ This enables:
 ### GitLab CI
 
 ```bash
-cp path/to/ldf/integrations/ci-cd/gitlab-ci.yaml .gitlab-ci.yml
+# Copy from LDF repository
+cp /path/to/ldf/integrations/ci-cd/gitlab-ci.yaml .gitlab-ci.yml
 ```
 
 See [CI/CD Integrations](../integrations/ci-cd/README.md) for full configuration options.
@@ -318,6 +366,8 @@ See [CI/CD Integrations](../integrations/ci-cd/README.md) for full configuration
 ## Next Steps
 
 - [Concepts](concepts.md) - Learn the philosophy behind LDF
+- [Answerpacks Guide](answerpacks.md) - How to capture design decisions
+- [Glossary](glossary.md) - Technical terms explained (RLS, PHI, HIPAA, etc.)
 - [Customization](customization.md) - Configure guardrails and question-packs
 - [Multi-Agent Workflow](multi-agent-workflow.md) - Use multiple AI agents
 - [Examples](../examples/) - See complete example projects

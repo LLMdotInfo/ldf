@@ -36,7 +36,7 @@ Thank you for your interest in contributing to LDF! This document provides guide
 
 ```bash
 # Clone your fork
-git clone https://github.com/YOUR_USERNAME/ldf.git
+git clone https://github.com/{your-username}/ldf.git
 cd ldf
 
 # Install in development mode

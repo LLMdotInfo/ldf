@@ -16,12 +16,13 @@ npm run package
 code --install-extension ldf-0.1.0.vsix
 ```
 
-### From Marketplace (Coming Soon)
+### From Marketplace
 
 ```bash
-# When published
-code --install-extension ldf.ldf-extension
+code --install-extension llmdotinfo.ldf-vscode
 ```
+
+Or search for "LDF Spec-Driven Development" in the VS Code Extensions sidebar.
 
 ## Features
 

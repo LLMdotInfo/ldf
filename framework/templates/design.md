@@ -1,11 +1,42 @@
 # {Feature Name} - Technical Design
 
+<!-- Replace {Feature Name} with your feature name, matching requirements.md -->
+
 ## Architecture Overview
+
+<!-- Example architecture diagram for a typical API feature.
+     Replace with your actual components and interactions. -->
+
 ```mermaid
 graph TB
-    A[Component A] -->|interaction| B[Component B]
-    B --> C[Database]
-    A --> D[External Service]
+    subgraph "Client Layer"
+        WEB[Web App]
+        MOBILE[Mobile App]
+    end
+
+    subgraph "API Layer"
+        GW[API Gateway]
+        AUTH[Auth Middleware]
+        API[API Endpoints]
+    end
+
+    subgraph "Service Layer"
+        SVC[Feature Service]
+        VALID[Validation]
+    end
+
+    subgraph "Data Layer"
+        DB[(PostgreSQL)]
+        CACHE[(Redis Cache)]
+    end
+
+    WEB & MOBILE -->|HTTPS| GW
+    GW --> AUTH
+    AUTH -->|JWT validated| API
+    API --> SVC
+    SVC --> VALID
+    SVC --> DB
+    SVC --> CACHE
 ```
 
 ## Guardrail Mapping
