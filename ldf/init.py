@@ -1,5 +1,6 @@
 """LDF project initialization."""
 
+import hashlib
 import shutil
 from datetime import datetime
 from pathlib import Path
@@ -10,6 +11,7 @@ import yaml
 from rich.panel import Panel
 from rich.prompt import Confirm
 
+from ldf import __version__
 from ldf.prompts import (
     confirm_initialization,
     prompt_install_hooks,
@@ -23,6 +25,15 @@ from ldf.utils.descriptions import get_all_mcp_servers, get_core_packs, is_mcp_s
 
 # Framework paths (relative to package)
 FRAMEWORK_DIR = Path(__file__).parent.parent / "framework"
+
+
+def compute_file_checksum(file_path: Path) -> str:
+    """Compute SHA256 checksum of a file."""
+    sha256 = hashlib.sha256()
+    with open(file_path, "rb") as f:
+        for chunk in iter(lambda: f.read(8192), b""):
+            sha256.update(chunk)
+    return sha256.hexdigest()
 
 
 def initialize_project(
@@ -122,17 +133,17 @@ def initialize_project(
     # Create directory structure
     _create_directories(ldf_dir)
 
-    # Create configuration
-    _create_config(ldf_dir, preset, question_packs, mcp_servers)
-
     # Create guardrails
     _create_guardrails(ldf_dir, preset)
 
-    # Copy question packs
-    _copy_question_packs(ldf_dir, question_packs)
+    # Copy question packs (returns checksums for modification detection)
+    checksums = _copy_question_packs(ldf_dir, question_packs)
 
     # Copy templates
     _copy_templates(ldf_dir)
+
+    # Create configuration (after question packs so we have checksums)
+    _create_config(ldf_dir, preset, question_packs, mcp_servers, checksums)
 
     # Copy macros
     _copy_macros(ldf_dir)
@@ -178,10 +189,13 @@ def _create_config(
     preset: str,
     question_packs: list[str],
     mcp_servers: list[str],
+    checksums: dict[str, str] | None = None,
 ) -> None:
     """Create the LDF configuration file."""
     config = {
         "version": "1.0",
+        "framework_version": __version__,
+        "framework_updated": datetime.now().isoformat(),
         "project": {
             "name": ldf_dir.parent.name,
             "specs_dir": ".ldf/specs",
@@ -197,6 +211,10 @@ def _create_config(
             "auto_fix": False,
         },
     }
+
+    # Store checksums for modification detection during updates
+    if checksums:
+        config["_checksums"] = checksums
 
     config_path = ldf_dir / "config.yaml"
     with open(config_path, "w") as f:
@@ -223,11 +241,16 @@ def _create_guardrails(ldf_dir: Path, preset: str) -> None:
     console.print(f"  [green]✓[/green] Created guardrails.yaml (preset: {preset})")
 
 
-def _copy_question_packs(ldf_dir: Path, packs: list[str]) -> None:
-    """Copy selected question packs to the project."""
+def _copy_question_packs(ldf_dir: Path, packs: list[str]) -> dict[str, str]:
+    """Copy selected question packs to the project.
+
+    Returns:
+        Dictionary mapping relative file paths to their checksums.
+    """
     source_dir = FRAMEWORK_DIR / "question-packs"
     dest_dir = ldf_dir / "question-packs"
 
+    checksums: dict[str, str] = {}
     copied = 0
     for pack in packs:
         # Check core packs
@@ -237,15 +260,20 @@ def _copy_question_packs(ldf_dir: Path, packs: list[str]) -> None:
             source = source_dir / "domain" / f"{pack}.yaml"
 
         if source.exists():
-            shutil.copy(source, dest_dir / f"{pack}.yaml")
+            dest = dest_dir / f"{pack}.yaml"
+            shutil.copy(source, dest)
+            # Store checksum with relative path
+            checksums[f"question-packs/{pack}.yaml"] = compute_file_checksum(dest)
             copied += 1
         else:
             # Create placeholder for domain packs
             placeholder = dest_dir / f"{pack}.yaml"
             placeholder.write_text(f"# {pack} question pack\n# TODO: Add questions\n")
+            checksums[f"question-packs/{pack}.yaml"] = compute_file_checksum(placeholder)
             copied += 1
 
     console.print(f"  [green]✓[/green] Copied {copied} question packs")
+    return checksums
 
 
 def _copy_templates(ldf_dir: Path) -> None:
@@ -594,4 +622,142 @@ def _print_summary(
     console.print("  3. Run [cyan]/project:create-spec <feature-name>[/cyan] to create your first spec")
     if not hooks_installed:
         console.print("  4. (Optional) Run [cyan]ldf hooks install[/cyan] to add pre-commit validation")
+    console.print()
+
+
+def repair_project(project_root: Path) -> None:
+    """Repair an incomplete LDF setup by adding missing files.
+
+    Only creates files that don't exist - never overwrites existing files.
+    Uses existing config values if available, otherwise uses defaults.
+
+    Args:
+        project_root: Project directory path
+    """
+    project_root = Path(project_root).resolve()
+    ldf_dir = project_root / ".ldf"
+
+    # Load existing config if available
+    config_path = ldf_dir / "config.yaml"
+    if config_path.exists():
+        try:
+            with open(config_path) as f:
+                config = yaml.safe_load(f) or {}
+        except Exception:
+            config = {}
+    else:
+        config = {}
+
+    # Extract settings from config or use defaults
+    preset = config.get("guardrails", {}).get("preset", "custom")
+    question_packs = config.get("question_packs", list(get_core_packs()))
+    mcp_servers = config.get("mcp_servers", ["spec-inspector", "coverage-reporter"])
+
+    repaired = []
+
+    # Ensure directories exist
+    dirs = [
+        ldf_dir,
+        ldf_dir / "specs",
+        ldf_dir / "question-packs",
+        ldf_dir / "answerpacks",
+        ldf_dir / "templates",
+        ldf_dir / "macros",
+        ldf_dir / "audit-history",
+    ]
+    for d in dirs:
+        if not d.exists():
+            d.mkdir(parents=True, exist_ok=True)
+            repaired.append(f"Created {d.relative_to(project_root)}/")
+
+    # Repair config.yaml if missing or incomplete
+    if not config_path.exists():
+        checksums = _copy_question_packs(ldf_dir, question_packs)
+        _create_config(ldf_dir, preset, question_packs, mcp_servers, checksums)
+        repaired.append("Created config.yaml")
+    else:
+        # Add missing fields to existing config
+        updated = False
+        if "framework_version" not in config:
+            config["framework_version"] = __version__
+            config["framework_updated"] = datetime.now().isoformat()
+            updated = True
+        if "_checksums" not in config:
+            # Compute checksums for existing question packs
+            checksums = {}
+            qp_dir = ldf_dir / "question-packs"
+            if qp_dir.exists():
+                for qp_file in qp_dir.glob("*.yaml"):
+                    rel_path = f"question-packs/{qp_file.name}"
+                    checksums[rel_path] = compute_file_checksum(qp_file)
+            if checksums:
+                config["_checksums"] = checksums
+                updated = True
+        if updated:
+            with open(config_path, "w") as f:
+                yaml.safe_dump(config, f, default_flow_style=False, sort_keys=False)
+            repaired.append("Updated config.yaml with missing fields")
+
+    # Repair guardrails.yaml
+    guardrails_path = ldf_dir / "guardrails.yaml"
+    if not guardrails_path.exists():
+        _create_guardrails(ldf_dir, preset)
+        repaired.append("Created guardrails.yaml")
+
+    # Repair question packs
+    qp_dir = ldf_dir / "question-packs"
+    existing_packs = {f.stem for f in qp_dir.glob("*.yaml")} if qp_dir.exists() else set()
+    missing_packs = set(question_packs) - existing_packs
+    if missing_packs:
+        source_dir = FRAMEWORK_DIR / "question-packs"
+        for pack in missing_packs:
+            source = source_dir / "core" / f"{pack}.yaml"
+            if not source.exists():
+                source = source_dir / "domain" / f"{pack}.yaml"
+            if source.exists():
+                shutil.copy(source, qp_dir / f"{pack}.yaml")
+                repaired.append(f"Added question pack: {pack}")
+
+    # Repair templates
+    templates_dir = ldf_dir / "templates"
+    for template in ["requirements.md", "design.md", "tasks.md"]:
+        dest = templates_dir / template
+        if not dest.exists():
+            source = FRAMEWORK_DIR / "templates" / template
+            if source.exists():
+                shutil.copy(source, dest)
+                repaired.append(f"Added template: {template}")
+
+    # Repair macros
+    macros_dir = ldf_dir / "macros"
+    for macro in ["clarify-first.md", "coverage-gate.md", "task-guardrails.md"]:
+        dest = macros_dir / macro
+        if not dest.exists():
+            source = FRAMEWORK_DIR / "macros" / macro
+            if source.exists():
+                shutil.copy(source, dest)
+                repaired.append(f"Added macro: {macro}")
+
+    # Repair CLAUDE.md
+    claude_md = project_root / "CLAUDE.md"
+    if not claude_md.exists():
+        _create_claude_md(project_root, preset, question_packs)
+        repaired.append("Created CLAUDE.md")
+
+    # Repair .claude/commands
+    commands_dir = project_root / ".claude" / "commands"
+    if not commands_dir.exists() or not any(commands_dir.glob("*.md")):
+        _create_claude_commands(project_root)
+        repaired.append("Created .claude/commands/")
+
+    # Print summary
+    console.print()
+    if repaired:
+        console.print("[green]Repair complete![/green]")
+        console.print()
+        console.print("[bold]Repaired:[/bold]")
+        for item in repaired:
+            console.print(f"  [green]✓[/green] {item}")
+    else:
+        console.print("[green]No repairs needed - setup is complete.[/green]")
     console.print()

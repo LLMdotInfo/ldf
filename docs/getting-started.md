@@ -99,6 +99,116 @@ ldf init -y
 ldf init --preset saas --hooks -y
 ```
 
+### Smart Detection
+
+`ldf init` automatically detects existing LDF projects and suggests appropriate actions:
+
+```bash
+# If LDF already initialized and current
+$ ldf init
+LDF is already initialized and up to date.
+
+# If project needs update
+$ ldf init
+LDF project is outdated (0.1.0 -> 0.2.0).
+Run 'ldf update' to update framework files.
+Use --force to reinitialize anyway.
+
+# Force reinitialize (overwrites all framework files)
+ldf init --force
+
+# Repair missing files without overwriting existing
+ldf init --repair
+```
+
+### Check Project Status
+
+Use `ldf status` to see the current state of your LDF project:
+
+```bash
+ldf status
+```
+
+**Output:**
+```
+LDF Project Status
+==================
+State: CURRENT
+Project version: 0.2.0
+Installed version: 0.2.0
+
+Setup Completeness:
+  [X] config.yaml
+  [X] guardrails.yaml
+  [X] templates
+  [X] macros
+  [X] question-packs
+  [X] CLAUDE.md
+  [X] .claude/commands
+
+LDF is up to date. No action needed.
+```
+
+For JSON output (useful in CI/CD):
+```bash
+ldf status --json
+```
+
+## Adding LDF to Existing Projects
+
+If you have an existing codebase and want to add LDF, use the `convert` command to analyze your code and generate initial specs:
+
+### 1. Analyze Your Codebase
+
+```bash
+ldf convert analyze
+```
+
+This scans your project and generates a prompt you can give to an AI assistant:
+
+```
+Codebase Analysis
+========================================
+Project: my-app
+Languages: python, typescript
+Frameworks: fastapi, react
+Suggested Preset: saas
+
+Generated Prompt:
+----------------------------------------
+# LDF Backwards Fill Analysis Request
+...
+```
+
+### 2. Use AI to Generate Specs
+
+Copy the generated prompt and paste it into Claude, ChatGPT, or another AI assistant. The AI will analyze your code and generate:
+- Answerpacks documenting existing design decisions
+- Spec files (requirements.md, design.md, tasks.md) for the existing system
+
+Save the AI's response to a file (e.g., `response.md`).
+
+### 3. Import the Results
+
+```bash
+# Preview what will be created
+ldf convert import response.md --dry-run
+
+# Import with custom spec name
+ldf convert import response.md -n my-existing-system
+
+# Import with default name (existing-system)
+ldf convert import response.md
+```
+
+This creates files in:
+- `.ldf/specs/{spec-name}/` - requirements.md, design.md, tasks.md
+- `.ldf/answerpacks/{spec-name}/` - security.yaml, testing.yaml, etc.
+
+### 4. Review and Refine
+
+Review the generated files and refine as needed. The AI-generated content provides a starting point based on your existing code patterns.
+
 ## Your First Spec
 
 ### 1. Create a Spec
@@ -362,6 +472,39 @@ cp /path/to/ldf/integrations/ci-cd/gitlab-ci.yaml .gitlab-ci.yml
 ```
 
 See [CI/CD Integrations](../integrations/ci-cd/README.md) for full configuration options.
+
+## Updating Framework Files
+
+When a new version of LDF is released, you can update your project's framework files while preserving your customizations:
+
+```bash
+# Check for available updates
+ldf update --check
+
+# Preview what would change
+ldf update --dry-run
+
+# Apply updates interactively
+ldf update
+
+# Update specific components only
+ldf update --only templates
+ldf update --only macros
+ldf update --only question-packs
+
+# Non-interactive mode (skip conflicts)
+ldf update -y
+```
+
+**What gets updated:**
+- `templates/` - Always replaced with latest versions
+- `macros/` - Always replaced with latest versions
+- `question-packs/` - Replaced if unmodified; prompts if you've made changes
+
+**What's never touched:**
+- `specs/` - Your feature specifications
+- `answerpacks/` - Your captured design decisions
+- Custom guardrails and configuration overrides
 
 ## Next Steps
 

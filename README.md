@@ -181,20 +181,43 @@ ldf audit --import feedback.md
 ## CLI Reference
 
 ```bash
+# Project initialization
 ldf init                        # Initialize LDF in current project
   --preset saas|fintech|healthcare|api-only
   --question-packs security,testing,billing
+  --force                       # Force reinitialize, overwrite existing
+  --repair                      # Fix missing files without overwriting
 
+# Project status
+ldf status                      # Show project state and recommendations
+ldf status --json               # JSON output for CI/scripts
+
+# Add LDF to existing projects
+ldf convert analyze             # Analyze codebase, generate AI prompt
+ldf convert analyze -o file.md  # Save prompt to file
+ldf convert import response.md  # Import AI-generated specs/answerpacks
+ldf convert import response.md -n my-feature  # Custom spec name
+ldf convert import response.md --dry-run      # Preview without creating
+
+# Spec validation
 ldf lint                        # Lint all specs
 ldf lint <spec-name>            # Lint single spec
 ldf lint --all --format ci      # CI-friendly output for GitHub Actions
 
+# Multi-agent audit
 ldf audit --type spec-review    # Generate spec review request
 ldf audit --type code-audit     # Generate code audit request
 ldf audit --import <file>       # Import audit feedback
 
+# Coverage
 ldf coverage                    # Show coverage summary
 ldf coverage --service auth     # Coverage for specific service
+
+# Framework updates
+ldf update --check              # Check for framework updates
+ldf update --dry-run            # Preview what would change
+ldf update                      # Apply updates interactively
+ldf update --only templates     # Update specific components
 ```
 
 ## CI/CD Integration
