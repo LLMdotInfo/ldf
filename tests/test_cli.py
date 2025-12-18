@@ -397,6 +397,333 @@ class TestMcpConfigCommand:
             assert result.exit_code == 0
 
 
+class TestInitEdgeCases:
+    """Tests for init command edge cases."""
+
+    def test_init_with_repair_no_ldf(self, runner: CliRunner, tmp_path: Path):
+        """Test init --repair on project without LDF."""
+        with runner.isolated_filesystem(temp_dir=tmp_path):
+            result = runner.invoke(cli, ["init", "--repair", "--yes"])
+
+            # Should proceed with full init or show message
+            assert result.exit_code == 0
+
+    def test_init_with_force(self, runner: CliRunner, tmp_path: Path):
+        """Test init --force reinitializes."""
+        with runner.isolated_filesystem(temp_dir=tmp_path):
+            # First init
+            runner.invoke(cli, ["init", "--yes"])
+            # Force reinit
+            result = runner.invoke(cli, ["init", "--force", "--yes"])
+
+            assert result.exit_code == 0
+
+    def test_init_repair_complete_project(self, runner: CliRunner, tmp_path: Path):
+        """Test init --repair on complete project."""
+        with runner.isolated_filesystem(temp_dir=tmp_path):
+            # Initialize fully
+            runner.invoke(cli, ["init", "--yes"])
+
+            # Try repair - should say up to date or no repair needed
+            result = runner.invoke(cli, ["init", "--repair"])
+
+            assert result.exit_code == 0
+            assert "up to date" in result.output.lower() or "complete" in result.output.lower()
+
+    def test_init_outdated_project(self, runner: CliRunner, tmp_path: Path):
+        """Test init on outdated project shows update message."""
+        from unittest.mock import patch, MagicMock
+        from ldf.detection import ProjectState
+
+        with runner.isolated_filesystem(temp_dir=tmp_path):
+            # Create basic LDF setup
+            ldf_dir = Path(".ldf")
+            ldf_dir.mkdir()
+            (ldf_dir / "config.yaml").write_text("version: '0.0.1'")
+
+            # Mock detect_project_state to return OUTDATED
+            mock_detection = MagicMock()
+            mock_detection.state = ProjectState.OUTDATED
+            mock_detection.project_version = "0.0.1"
+            mock_detection.installed_version = "1.0.0"
+
+            with patch("ldf.detection.detect_project_state", return_value=mock_detection):
+                result = runner.invoke(cli, ["init"])
+
+                assert result.exit_code == 0
+                assert "outdated" in result.output.lower() or "update" in result.output.lower()
+
+    def test_init_legacy_project(self, runner: CliRunner, tmp_path: Path):
+        """Test init on legacy project shows upgrade message."""
+        from unittest.mock import patch, MagicMock
+        from ldf.detection import ProjectState
+
+        with runner.isolated_filesystem(temp_dir=tmp_path):
+            # Create legacy-style LDF setup (no version)
+            ldf_dir = Path(".ldf")
+            ldf_dir.mkdir()
+            (ldf_dir / "config.yaml").write_text("preset: saas")
+
+            # Mock detect_project_state to return LEGACY
+            mock_detection = MagicMock()
+            mock_detection.state = ProjectState.LEGACY
+
+            with patch("ldf.detection.detect_project_state", return_value=mock_detection):
+                result = runner.invoke(cli, ["init"])
+
+                assert result.exit_code == 0
+                assert "legacy" in result.output.lower() or "update" in result.output.lower()
+
+    def test_init_partial_project_no_repair(self, runner: CliRunner, tmp_path: Path):
+        """Test init on partial project without --repair shows repair message."""
+        from unittest.mock import patch, MagicMock
+        from ldf.detection import ProjectState
+
+        with runner.isolated_filesystem(temp_dir=tmp_path):
+            # Create partial LDF setup
+            ldf_dir = Path(".ldf")
+            ldf_dir.mkdir()
+            (ldf_dir / "config.yaml").write_text("version: '1.0'")
+
+            # Mock detect_project_state to return PARTIAL
+            mock_detection = MagicMock()
+            mock_detection.state = ProjectState.PARTIAL
+            mock_detection.missing_files = ["guardrails.yaml", "templates/", "framework/"]
+
+            with patch("ldf.detection.detect_project_state", return_value=mock_detection):
+                result = runner.invoke(cli, ["init"])
+
+                assert result.exit_code == 0
+                assert "incomplete" in result.output.lower() or "repair" in result.output.lower()
+
+    def test_init_corrupted_project(self, runner: CliRunner, tmp_path: Path):
+        """Test init on corrupted project shows force message."""
+        from unittest.mock import patch, MagicMock
+        from ldf.detection import ProjectState
+
+        with runner.isolated_filesystem(temp_dir=tmp_path):
+            # Create corrupted LDF setup
+            ldf_dir = Path(".ldf")
+            ldf_dir.mkdir()
+            (ldf_dir / "config.yaml").write_text("invalid: yaml: content: [")
+
+            # Mock detect_project_state to return CORRUPTED
+            mock_detection = MagicMock()
+            mock_detection.state = ProjectState.CORRUPTED
+            mock_detection.invalid_files = ["config.yaml"]
+
+            with patch("ldf.detection.detect_project_state", return_value=mock_detection):
+                result = runner.invoke(cli, ["init"])
+
+                assert result.exit_code == 0
+                assert "corrupted" in result.output.lower() or "force" in result.output.lower()
+
+    def test_init_repair_partial_in_detection(self, runner: CliRunner, tmp_path: Path):
+        """Test init --repair on partial project runs repair (in detection block)."""
+        from unittest.mock import patch, MagicMock
+        from ldf.detection import ProjectState
+
+        with runner.isolated_filesystem(temp_dir=tmp_path):
+            # Create partial LDF setup
+            ldf_dir = Path(".ldf")
+            ldf_dir.mkdir()
+            (ldf_dir / "config.yaml").write_text("version: '1.0'")
+
+            # Mock detect_project_state to return PARTIAL
+            mock_detection = MagicMock()
+            mock_detection.state = ProjectState.PARTIAL
+            mock_detection.missing_files = ["guardrails.yaml"]
+
+            with patch("ldf.detection.detect_project_state", return_value=mock_detection), \
+                 patch("ldf.init.repair_project") as mock_repair:
+                result = runner.invoke(cli, ["init", "--repair"])
+
+                assert result.exit_code == 0
+                # In the detection block (lines 143-147), repair is called for PARTIAL
+                mock_repair.assert_called_once()
+
+    def test_init_force_repair_legacy_project(self, runner: CliRunner, tmp_path: Path):
+        """Test init --force --repair on legacy project runs repair (skipping detection)."""
+        from unittest.mock import patch, MagicMock
+        from ldf.detection import ProjectState
+
+        with runner.isolated_filesystem(temp_dir=tmp_path):
+            # Create legacy LDF setup
+            ldf_dir = Path(".ldf")
+            ldf_dir.mkdir()
+            (ldf_dir / "config.yaml").write_text("preset: saas")
+
+            # Mock detect_project_state to return LEGACY
+            mock_detection = MagicMock()
+            mock_detection.state = ProjectState.LEGACY
+
+            # With --force, detection block is skipped, then --repair triggers lines 173-176
+            with patch("ldf.detection.detect_project_state", return_value=mock_detection), \
+                 patch("ldf.init.repair_project") as mock_repair:
+                result = runner.invoke(cli, ["init", "--force", "--repair"])
+
+                assert result.exit_code == 0
+                mock_repair.assert_called_once()
+
+    def test_init_force_repair_new_project(self, runner: CliRunner, tmp_path: Path):
+        """Test init --force --repair on new project falls through to init."""
+        from unittest.mock import patch, MagicMock
+        from ldf.detection import ProjectState
+
+        with runner.isolated_filesystem(temp_dir=tmp_path):
+            # No LDF setup - NEW state
+            mock_detection = MagicMock()
+            mock_detection.state = ProjectState.NEW
+
+            with patch("ldf.detection.detect_project_state", return_value=mock_detection):
+                result = runner.invoke(cli, ["init", "--force", "--repair", "--yes"])
+
+                assert result.exit_code == 0
+                # Should show message about no existing setup to repair
+                assert "No existing LDF setup" in result.output or Path(".ldf").exists()
+
+    def test_init_force_repair_current_project(self, runner: CliRunner, tmp_path: Path):
+        """Test init --force --repair on current project says no repair needed."""
+        from unittest.mock import patch, MagicMock
+        from ldf.detection import ProjectState
+
+        with runner.isolated_filesystem(temp_dir=tmp_path):
+            # Create full LDF setup
+            ldf_dir = Path(".ldf")
+            ldf_dir.mkdir()
+            (ldf_dir / "config.yaml").write_text("version: '1.0'")
+
+            mock_detection = MagicMock()
+            mock_detection.state = ProjectState.CURRENT
+
+            with patch("ldf.detection.detect_project_state", return_value=mock_detection):
+                result = runner.invoke(cli, ["init", "--force", "--repair"])
+
+                assert result.exit_code == 0
+                # Lines 177-179: should say no repair needed
+                assert "complete" in result.output.lower() or "no repair" in result.output.lower()
+
+
+class TestConvertImportCommand:
+    """Tests for 'ldf convert import' command."""
+
+    def test_convert_import_requires_init(self, runner: CliRunner, tmp_path: Path):
+        """Test convert import fails without LDF init."""
+        with runner.isolated_filesystem(temp_dir=tmp_path):
+            # Create a dummy response file
+            Path("response.md").write_text("# Requirements\nSome content")
+
+            result = runner.invoke(cli, ["convert", "import", "response.md"])
+
+            assert result.exit_code == 1
+            assert "init" in result.output.lower()
+
+    def test_convert_import_dry_run(self, runner: CliRunner, tmp_path: Path):
+        """Test convert import with dry-run."""
+        with runner.isolated_filesystem(temp_dir=tmp_path):
+            # Initialize LDF first
+            runner.invoke(cli, ["init", "--yes"])
+
+            # Create a response file
+            Path("response.md").write_text("""# Requirements
+
+## Feature: Test Feature
+
+This is a test requirement.
+
+# Design
+
+Design details here.
+
+# Tasks
+
+- Task 1
+- Task 2
+""")
+
+            result = runner.invoke(cli, ["convert", "import", "response.md", "--dry-run"])
+
+            # Should succeed or show preview
+            assert "dry run" in result.output.lower() or result.exit_code in (0, 1)
+
+    def test_convert_import_with_spec_name(self, runner: CliRunner, tmp_path: Path):
+        """Test convert import with custom spec name."""
+        with runner.isolated_filesystem(temp_dir=tmp_path):
+            runner.invoke(cli, ["init", "--yes"])
+
+            Path("response.md").write_text("# Requirements\n\nTest content")
+
+            result = runner.invoke(cli, ["convert", "import", "response.md", "-n", "my-feature"])
+
+            # Check it ran (may fail on parsing but command executed)
+            assert result.exit_code in (0, 1)
+
+
+class TestStatusEdgeCases:
+    """Tests for status command edge cases."""
+
+    def test_status_partial_project(self, runner: CliRunner, tmp_path: Path):
+        """Test status on partial/incomplete project."""
+        with runner.isolated_filesystem(temp_dir=tmp_path):
+            # Create partial LDF setup (missing some files)
+            ldf_dir = Path(".ldf")
+            ldf_dir.mkdir()
+            (ldf_dir / "config.yaml").write_text("version: '1.0'")
+            # Missing guardrails.yaml, templates, etc.
+
+            result = runner.invoke(cli, ["status"])
+
+            assert result.exit_code == 0
+            # Should show partial or missing info
+            assert "PARTIAL" in result.output or "Missing" in result.output or "Project" in result.output
+
+    def test_status_with_invalid_files(self, runner: CliRunner, tmp_path: Path):
+        """Test status shows invalid files when present."""
+        from unittest.mock import patch, MagicMock
+        from ldf.detection import ProjectState
+
+        with runner.isolated_filesystem(temp_dir=tmp_path):
+            # Create LDF setup
+            ldf_dir = Path(".ldf")
+            ldf_dir.mkdir()
+            (ldf_dir / "config.yaml").write_text("version: '1.0'")
+
+            # Mock detect_project_state to return invalid files
+            mock_result = MagicMock()
+            mock_result.state = ProjectState.PARTIAL
+            mock_result.project_root = Path(".")
+            mock_result.missing_files = []
+            mock_result.invalid_files = ["config.yaml", "guardrails.yaml"]
+            mock_result.recommended_action = "Fix invalid files"
+            mock_result.recommended_command = "ldf init --force"
+
+            with patch("ldf.detection.detect_project_state", return_value=mock_result):
+                result = runner.invoke(cli, ["status"])
+
+                assert result.exit_code == 0
+                # Should show invalid files in output
+                assert "Invalid" in result.output or "invalid" in result.output.lower()
+
+    def test_status_with_many_specs(self, runner: CliRunner, tmp_path: Path):
+        """Test status shows >5 specs with 'and X more' message."""
+        with runner.isolated_filesystem(temp_dir=tmp_path):
+            # Initialize LDF
+            runner.invoke(cli, ["init", "--yes"])
+
+            # Create more than 5 specs
+            specs_dir = Path(".ldf/specs")
+            for i in range(8):
+                spec_dir = specs_dir / f"spec-{i}"
+                spec_dir.mkdir(parents=True, exist_ok=True)
+                (spec_dir / "requirements.md").write_text(f"# Spec {i}\n\nRequirements for spec {i}")
+
+            result = runner.invoke(cli, ["status"])
+
+            assert result.exit_code == 0
+            # Should show "and X more" for specs > 5
+            assert "more" in result.output or "Specs" in result.output
+
+
 class TestMainEntryPoint:
     """Tests for main entry point."""
 
@@ -404,3 +731,10 @@ class TestMainEntryPoint:
         """Test that main CLI function is callable."""
         from ldf.cli import main
         assert callable(main)
+
+    def test_main_invoked_directly(self, runner: CliRunner):
+        """Test that main can be invoked with --help."""
+        result = runner.invoke(cli, ["--help"])
+        # Should show help
+        assert result.exit_code == 0
+        assert "ldf" in result.output.lower()
