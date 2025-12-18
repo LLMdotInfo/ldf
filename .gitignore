@@ -45,6 +45,9 @@ htmlcov/
 .dmypy.json
 dmypy.json
 
+# Linting
+.ruff_cache/
+
 # Documentation
 docs/_build/
 
@@ -66,5 +69,5 @@ docs/_build/
 Thumbs.db
 
 # Project-specific
-.wdf/answerpacks/*.yaml
-!.wdf/answerpacks/.gitkeep
+.ldf/answerpacks/*.yaml
+!.ldf/answerpacks/.gitkeep
