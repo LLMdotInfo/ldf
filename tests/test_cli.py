@@ -265,6 +265,138 @@ class TestHooksCommands:
         assert "Hook" in result.output
 
 
+class TestStatusCommand:
+    """Tests for 'ldf status' command."""
+
+    def test_status_new_project(self, runner: CliRunner, tmp_path: Path):
+        """Test status on a new project without LDF."""
+        with runner.isolated_filesystem(temp_dir=tmp_path):
+            result = runner.invoke(cli, ["status"])
+
+            assert result.exit_code == 0
+            assert "NEW" in result.output or "new" in result.output.lower()
+
+    def test_status_initialized_project(self, runner: CliRunner, tmp_path: Path):
+        """Test status on an initialized project."""
+        with runner.isolated_filesystem(temp_dir=tmp_path):
+            # Initialize first
+            runner.invoke(cli, ["init", "--yes"])
+
+            result = runner.invoke(cli, ["status"])
+
+            assert result.exit_code == 0
+            assert "CURRENT" in result.output or "Project" in result.output
+
+    def test_status_json_output(self, runner: CliRunner, tmp_path: Path):
+        """Test status with JSON output."""
+        with runner.isolated_filesystem(temp_dir=tmp_path):
+            runner.invoke(cli, ["init", "--yes"])
+
+            result = runner.invoke(cli, ["status", "--json"])
+
+            assert result.exit_code == 0
+            # Should contain JSON-like output
+            assert "{" in result.output or "state" in result.output.lower()
+
+    def test_status_with_specs(self, runner: CliRunner, temp_spec: Path, monkeypatch):
+        """Test status shows specs when present."""
+        project_dir = temp_spec.parent.parent.parent
+        monkeypatch.chdir(project_dir)
+
+        result = runner.invoke(cli, ["status"])
+
+        assert result.exit_code == 0
+
+
+class TestUpdateCommand:
+    """Tests for 'ldf update' command."""
+
+    def test_update_check(self, runner: CliRunner, temp_project: Path, monkeypatch):
+        """Test update --check shows available updates."""
+        monkeypatch.chdir(temp_project)
+
+        result = runner.invoke(cli, ["update", "--check"])
+
+        assert result.exit_code == 0
+
+    def test_update_dry_run(self, runner: CliRunner, temp_project: Path, monkeypatch):
+        """Test update --dry-run previews changes."""
+        monkeypatch.chdir(temp_project)
+
+        result = runner.invoke(cli, ["update", "--dry-run"])
+
+        assert result.exit_code == 0
+
+    def test_update_with_yes(self, runner: CliRunner, temp_project: Path, monkeypatch):
+        """Test update --yes applies updates non-interactively."""
+        monkeypatch.chdir(temp_project)
+
+        result = runner.invoke(cli, ["update", "--yes"])
+
+        assert result.exit_code == 0
+
+    def test_update_requires_init(self, runner: CliRunner, tmp_path: Path):
+        """Test update fails without LDF initialized."""
+        with runner.isolated_filesystem(temp_dir=tmp_path):
+            result = runner.invoke(cli, ["update"])
+
+            assert result.exit_code == 1
+
+
+class TestConvertCommand:
+    """Tests for 'ldf convert' command."""
+
+    def test_convert_help(self, runner: CliRunner):
+        """Test convert group help."""
+        result = runner.invoke(cli, ["convert", "--help"])
+
+        assert result.exit_code == 0
+        assert "analyze" in result.output
+        assert "import" in result.output
+
+    def test_convert_analyze(self, runner: CliRunner, tmp_path: Path):
+        """Test convert analyze generates prompt."""
+        with runner.isolated_filesystem(temp_dir=tmp_path):
+            # Create some source files to analyze
+            Path("main.py").write_text("print('hello')")
+            Path("README.md").write_text("# My Project")
+
+            result = runner.invoke(cli, ["convert", "analyze"])
+
+            assert result.exit_code == 0
+
+    def test_convert_analyze_output_file(self, runner: CliRunner, tmp_path: Path):
+        """Test convert analyze with output file."""
+        with runner.isolated_filesystem(temp_dir=tmp_path):
+            Path("main.py").write_text("print('hello')")
+
+            result = runner.invoke(cli, ["convert", "analyze", "-o", "prompt.md"])
+
+            assert result.exit_code == 0
+            assert Path("prompt.md").exists()
+
+
+class TestMcpConfigCommand:
+    """Tests for 'ldf mcp-config' command."""
+
+    def test_mcp_config_basic(self, runner: CliRunner, temp_project: Path, monkeypatch):
+        """Test mcp-config generates configuration."""
+        monkeypatch.chdir(temp_project)
+
+        result = runner.invoke(cli, ["mcp-config"])
+
+        assert result.exit_code == 0
+        assert "mcpServers" in result.output or "spec-inspector" in result.output
+
+    def test_mcp_config_without_init(self, runner: CliRunner, tmp_path: Path):
+        """Test mcp-config works even without full LDF init (generates basic config)."""
+        with runner.isolated_filesystem(temp_dir=tmp_path):
+            result = runner.invoke(cli, ["mcp-config"])
+
+            # Should succeed and output config (may be minimal)
+            assert result.exit_code == 0
+
+
 class TestMainEntryPoint:
     """Tests for main entry point."""
 

@@ -1,0 +1,242 @@
+"""Tests for ldf.prompts module."""
+
+from pathlib import Path
+from unittest.mock import MagicMock, patch
+
+import pytest
+
+
+class TestPromptPreset:
+    """Tests for prompt_preset function."""
+
+    def test_prompt_preset_returns_selection(self):
+        """Test prompt_preset returns selected preset."""
+        from ldf.prompts import prompt_preset
+
+        with patch("ldf.prompts.questionary") as mock_q:
+            mock_q.select.return_value.ask.return_value = "saas"
+
+            result = prompt_preset()
+
+            assert result == "saas"
+            mock_q.select.assert_called_once()
+
+    def test_prompt_preset_user_cancels(self):
+        """Test prompt_preset raises on cancel."""
+        from ldf.prompts import prompt_preset
+
+        with patch("ldf.prompts.questionary") as mock_q:
+            mock_q.select.return_value.ask.return_value = None
+
+            with pytest.raises(KeyboardInterrupt):
+                prompt_preset()
+
+
+class TestPromptQuestionPacks:
+    """Tests for prompt_question_packs function."""
+
+    def test_prompt_question_packs_returns_core_plus_selected(self):
+        """Test prompt_question_packs returns core packs plus selections."""
+        from ldf.prompts import prompt_question_packs
+
+        with patch("ldf.prompts.questionary") as mock_q, \
+             patch("ldf.prompts.get_core_packs") as mock_core, \
+             patch("ldf.prompts.get_domain_packs") as mock_domain, \
+             patch("ldf.prompts.get_preset_recommended_packs") as mock_rec:
+            mock_core.return_value = ["security", "testing"]
+            mock_domain.return_value = ["billing", "webhooks"]
+            mock_rec.return_value = ["billing"]
+            mock_q.checkbox.return_value.ask.return_value = ["billing"]
+
+            result = prompt_question_packs("saas")
+
+            assert "security" in result
+            assert "testing" in result
+            assert "billing" in result
+
+    def test_prompt_question_packs_no_domain_packs(self):
+        """Test prompt_question_packs with no domain packs."""
+        from ldf.prompts import prompt_question_packs
+
+        with patch("ldf.prompts.get_core_packs") as mock_core, \
+             patch("ldf.prompts.get_domain_packs") as mock_domain, \
+             patch("ldf.prompts.get_preset_recommended_packs") as mock_rec:
+            mock_core.return_value = ["security", "testing"]
+            mock_domain.return_value = []
+            mock_rec.return_value = []
+
+            result = prompt_question_packs("custom")
+
+            assert result == ["security", "testing"]
+
+    def test_prompt_question_packs_user_cancels(self):
+        """Test prompt_question_packs raises on cancel."""
+        from ldf.prompts import prompt_question_packs
+
+        with patch("ldf.prompts.questionary") as mock_q, \
+             patch("ldf.prompts.get_core_packs") as mock_core, \
+             patch("ldf.prompts.get_domain_packs") as mock_domain, \
+             patch("ldf.prompts.get_preset_recommended_packs") as mock_rec:
+            mock_core.return_value = ["security"]
+            mock_domain.return_value = ["billing"]
+            mock_rec.return_value = []
+            mock_q.checkbox.return_value.ask.return_value = None
+
+            with pytest.raises(KeyboardInterrupt):
+                prompt_question_packs("custom")
+
+
+class TestPromptMcpServers:
+    """Tests for prompt_mcp_servers function."""
+
+    def test_prompt_mcp_servers_returns_selection(self):
+        """Test prompt_mcp_servers returns selected servers."""
+        from ldf.prompts import prompt_mcp_servers
+
+        with patch("ldf.prompts.questionary") as mock_q, \
+             patch("ldf.prompts.get_all_mcp_servers") as mock_servers:
+            mock_servers.return_value = ["spec-inspector", "coverage-reporter"]
+            mock_q.checkbox.return_value.ask.return_value = ["spec-inspector"]
+
+            result = prompt_mcp_servers()
+
+            assert result == ["spec-inspector"]
+
+    def test_prompt_mcp_servers_user_cancels(self):
+        """Test prompt_mcp_servers raises on cancel."""
+        from ldf.prompts import prompt_mcp_servers
+
+        with patch("ldf.prompts.questionary") as mock_q, \
+             patch("ldf.prompts.get_all_mcp_servers") as mock_servers:
+            mock_servers.return_value = ["spec-inspector"]
+            mock_q.checkbox.return_value.ask.return_value = None
+
+            with pytest.raises(KeyboardInterrupt):
+                prompt_mcp_servers()
+
+
+class TestPromptInstallHooks:
+    """Tests for prompt_install_hooks function."""
+
+    def test_prompt_install_hooks_yes(self):
+        """Test prompt_install_hooks returns True when user confirms."""
+        from ldf.prompts import prompt_install_hooks
+
+        with patch("ldf.prompts.questionary") as mock_q:
+            mock_q.confirm.return_value.ask.return_value = True
+
+            result = prompt_install_hooks()
+
+            assert result is True
+
+    def test_prompt_install_hooks_no(self):
+        """Test prompt_install_hooks returns False when user declines."""
+        from ldf.prompts import prompt_install_hooks
+
+        with patch("ldf.prompts.questionary") as mock_q:
+            mock_q.confirm.return_value.ask.return_value = False
+
+            result = prompt_install_hooks()
+
+            assert result is False
+
+    def test_prompt_install_hooks_cancel(self):
+        """Test prompt_install_hooks raises on cancel."""
+        from ldf.prompts import prompt_install_hooks
+
+        with patch("ldf.prompts.questionary") as mock_q:
+            mock_q.confirm.return_value.ask.return_value = None
+
+            with pytest.raises(KeyboardInterrupt):
+                prompt_install_hooks()
+
+
+class TestConfirmInitialization:
+    """Tests for confirm_initialization function."""
+
+    def test_confirm_initialization_yes(self, tmp_path: Path):
+        """Test confirm_initialization returns True on confirm."""
+        from ldf.prompts import confirm_initialization
+
+        with patch("ldf.prompts.questionary") as mock_q:
+            mock_q.confirm.return_value.ask.return_value = True
+
+            result = confirm_initialization(
+                project_path=tmp_path,
+                preset="saas",
+                question_packs=["security", "testing"],
+                mcp_servers=["spec-inspector"],
+                install_hooks=False,
+            )
+
+            assert result is True
+
+    def test_confirm_initialization_no(self, tmp_path: Path):
+        """Test confirm_initialization returns False on decline."""
+        from ldf.prompts import confirm_initialization
+
+        with patch("ldf.prompts.questionary") as mock_q:
+            mock_q.confirm.return_value.ask.return_value = False
+
+            result = confirm_initialization(
+                project_path=tmp_path,
+                preset="custom",
+                question_packs=["security"],
+                mcp_servers=[],
+                install_hooks=True,
+            )
+
+            assert result is False
+
+    def test_confirm_initialization_cancel(self, tmp_path: Path):
+        """Test confirm_initialization raises on cancel."""
+        from ldf.prompts import confirm_initialization
+
+        with patch("ldf.prompts.questionary") as mock_q:
+            mock_q.confirm.return_value.ask.return_value = None
+
+            with pytest.raises(KeyboardInterrupt):
+                confirm_initialization(
+                    project_path=tmp_path,
+                    preset="saas",
+                    question_packs=["security"],
+                    mcp_servers=[],
+                )
+
+
+class TestPromptProjectPath:
+    """Tests for prompt_project_path function."""
+
+    def test_prompt_project_path_returns_path(self, tmp_path: Path):
+        """Test prompt_project_path returns valid path."""
+        from ldf.prompts import prompt_project_path
+
+        with patch("ldf.prompts.questionary") as mock_q, \
+             patch("ldf.prompts.Path") as mock_path_cls:
+            # Mock Path.cwd() to return tmp_path
+            mock_path_cls.cwd.return_value = tmp_path
+            # Mock the text input return value
+            mock_q.text.return_value.ask.return_value = str(tmp_path / "new-project")
+            # Mock Path() constructor to return actual Path
+            mock_path_cls.side_effect = lambda x: Path(x)
+            mock_path_cls.cwd = MagicMock(return_value=tmp_path)
+
+            # Call function with real Path import
+            from ldf import prompts
+            original_path = prompts.Path
+            with patch.object(prompts, "Path", wraps=Path) as mock_p:
+                mock_p.cwd = MagicMock(return_value=tmp_path)
+                with patch("ldf.prompts.questionary") as mock_q2:
+                    mock_q2.text.return_value.ask.return_value = str(tmp_path / "project")
+                    result = prompt_project_path()
+                    assert isinstance(result, Path)
+
+    def test_prompt_project_path_user_cancels(self):
+        """Test prompt_project_path raises on cancel."""
+        from ldf.prompts import prompt_project_path
+
+        with patch("ldf.prompts.questionary") as mock_q:
+            mock_q.text.return_value.ask.return_value = None
+
+            with pytest.raises(KeyboardInterrupt):
+                prompt_project_path()
