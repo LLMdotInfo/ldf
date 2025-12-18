@@ -76,6 +76,8 @@ def run_audit(
     audit_type: str | None,
     import_file: str | None,
     use_api: bool,
+    agent: str | None = None,
+    auto_import: bool = False,
     include_secrets: bool = False,
     skip_confirm: bool = False,
     spec_name: str | None = None,
@@ -84,9 +86,11 @@ def run_audit(
 
     Args:
         audit_type: Type of audit (spec-review, code-audit, security, pre-launch,
-            gap-analysis, edge-cases, architecture)
+            gap-analysis, edge-cases, architecture, full)
         import_file: Path to feedback file to import
         use_api: Whether to use API automation
+        agent: AI provider for API audit ("chatgpt" or "gemini")
+        auto_import: Whether to automatically import API response
         include_secrets: Whether to include potentially sensitive content
         skip_confirm: Whether to skip confirmation prompts
         spec_name: Optional specific spec to audit (audits all if not provided)
@@ -94,30 +98,165 @@ def run_audit(
     if import_file:
         _import_feedback(Path(import_file))
     elif audit_type:
-        _generate_audit_request(audit_type, use_api, include_secrets, skip_confirm, spec_name)
+        if use_api and agent:
+            _run_api_audit(audit_type, agent, auto_import, include_secrets, skip_confirm, spec_name)
+        elif use_api:
+            console.print("[red]Error: --api requires --agent (chatgpt or gemini)[/red]")
+            console.print("\nExample:")
+            console.print("  ldf audit --type spec-review --api --agent chatgpt")
+        else:
+            _generate_audit_request(audit_type, include_secrets, skip_confirm, spec_name)
     else:
         console.print("[red]Error: Specify --type or --import[/red]")
         console.print("\nExamples:")
         console.print("  ldf audit --type spec-review")
         console.print("  ldf audit --type gap-analysis --spec user-auth")
+        console.print("  ldf audit --type security --api --agent chatgpt")
         console.print("  ldf audit --import feedback.md")
+
+
+def _run_api_audit(
+    audit_type: str,
+    agent: str,
+    auto_import: bool,
+    include_secrets: bool,
+    skip_confirm: bool,
+    spec_name: str | None,
+) -> None:
+    """Run an API-based audit using ChatGPT or Gemini.
+
+    Args:
+        audit_type: Type of audit
+        agent: AI provider ("chatgpt" or "gemini")
+        auto_import: Whether to auto-import the response
+        include_secrets: Whether to include sensitive content
+        skip_confirm: Whether to skip confirmation prompts
+        spec_name: Optional specific spec to audit
+    """
+    import asyncio
+
+    from ldf.audit_api import run_api_audit, save_audit_response, load_api_config
+
+    # Check if API is configured
+    configs = load_api_config()
+    if agent not in configs:
+        console.print(f"[red]Error: {agent} not configured in .ldf/config.yaml[/red]")
+        console.print("\nAdd the following to .ldf/config.yaml:")
+        if agent == "chatgpt":
+            console.print("""
+audit_api:
+  chatgpt:
+    api_key: ${OPENAI_API_KEY}
+    model: gpt-4
+""")
+        else:
+            console.print("""
+audit_api:
+  gemini:
+    api_key: ${GOOGLE_API_KEY}
+    model: gemini-pro
+""")
+        return
+
+    # Handle "full" audit type - run all types
+    if audit_type == "full":
+        audit_types = [
+            "spec-review", "security", "gap-analysis",
+            "edge-cases", "architecture"
+        ]
+        console.print(f"[bold]Running full audit ({len(audit_types)} types)...[/bold]")
+    else:
+        audit_types = [audit_type]
+
+    all_responses = []
+
+    for atype in audit_types:
+        # Generate the prompt content (without writing to file)
+        prompt = _build_audit_prompt_for_api(atype, include_secrets, spec_name)
+        if prompt is None:
+            return
+
+        # Run the API audit
+        response = asyncio.run(run_api_audit(agent, atype, prompt, spec_name))
+        all_responses.append(response)
+
+        if response.success:
+            # Save the response
+            saved_path = save_audit_response(response)
+            console.print(f"[green]Saved: {saved_path}[/green]")
+
+            if auto_import:
+                # Display the feedback
+                console.print("\n[bold]Audit Response:[/bold]")
+                console.print(Markdown(response.content))
+        else:
+            console.print(f"[red]Audit failed for {atype}[/red]")
+            for error in response.errors:
+                console.print(f"  [red]-[/red] {error}")
+
+    # Summary
+    successful = sum(1 for r in all_responses if r.success)
+    console.print(f"\n[bold]Audit complete:[/bold] {successful}/{len(all_responses)} successful")
+
+    if successful > 0:
+        console.print("\nNext steps:")
+        console.print("  1. Review the audit responses in .ldf/audit-history/")
+        console.print("  2. Address critical issues in your specs")
+        console.print("  3. Run 'ldf lint' to validate changes")
+
+
+def _build_audit_prompt_for_api(
+    audit_type: str,
+    include_secrets: bool,
+    spec_name: str | None,
+) -> str | None:
+    """Build audit prompt for API calls (without writing to file).
+
+    Args:
+        audit_type: Type of audit
+        include_secrets: Whether to include sensitive content
+        spec_name: Optional specific spec
+
+    Returns:
+        Prompt content or None if failed
+    """
+    specs_dir = Path.cwd() / ".ldf" / "specs"
+    if not specs_dir.exists():
+        console.print("[red]Error: .ldf/specs/ not found. Run 'ldf init' first.[/red]")
+        return None
+
+    if spec_name:
+        spec_path = specs_dir / spec_name
+        if not spec_path.exists() or not spec_path.is_dir():
+            console.print(f"[red]Error: Spec '{spec_name}' not found.[/red]")
+            return None
+        specs = [spec_path]
+    else:
+        specs = [d for d in specs_dir.iterdir() if d.is_dir()]
+
+    if not specs:
+        console.print("[yellow]No specs found to audit.[/yellow]")
+        return None
+
+    return _build_audit_request(audit_type, specs, include_secrets)
 
 
 def _generate_audit_request(
     audit_type: str,
-    use_api: bool,
     include_secrets: bool = False,
     skip_confirm: bool = False,
     spec_name: str | None = None,
-) -> None:
+) -> str | None:
     """Generate an audit request for external AI agents.
 
     Args:
         audit_type: Type of audit request
-        use_api: Whether to use API automation
         include_secrets: Whether to include sensitive content
         skip_confirm: Whether to skip confirmation prompts
         spec_name: Optional specific spec to audit
+
+    Returns:
+        The generated audit request content, or None if aborted/failed
     """
     console.print(f"\n[bold blue]Generating {audit_type} audit request...[/bold blue]\n")
 
@@ -125,7 +264,7 @@ def _generate_audit_request(
     specs_dir = Path.cwd() / ".ldf" / "specs"
     if not specs_dir.exists():
         console.print("[red]Error: .ldf/specs/ not found. Run 'ldf init' first.[/red]")
-        return
+        return None
 
     # Filter to specific spec if requested
     if spec_name:
@@ -133,14 +272,14 @@ def _generate_audit_request(
         if not spec_path.exists() or not spec_path.is_dir():
             console.print(f"[red]Error: Spec '{spec_name}' not found.[/red]")
             console.print(f"[dim]Available specs: {', '.join(d.name for d in specs_dir.iterdir() if d.is_dir())}[/dim]")
-            return
+            return None
         specs = [spec_path]
     else:
         specs = [d for d in specs_dir.iterdir() if d.is_dir()]
 
     if not specs:
         console.print("[yellow]No specs found to audit.[/yellow]")
-        return
+        return None
 
     # Generate audit request markdown
     output_path = Path.cwd() / f"audit-request-{audit_type}.md"
@@ -166,7 +305,7 @@ def _generate_audit_request(
 
         if not Confirm.ask("Proceed with export?", default=True):
             console.print("[red]Aborted.[/red]")
-            return
+            return None
 
     output_path.write_text(content)
 
@@ -177,10 +316,10 @@ def _generate_audit_request(
     console.print("  1. Copy the content of this file")
     console.print("  2. Paste into ChatGPT or Gemini with the appropriate prompt")
     console.print(f"  3. Save the response and run: ldf audit --import feedback.md")
+    console.print("\nOr use API automation:")
+    console.print(f"  ldf audit --type {audit_type} --api --agent chatgpt")
 
-    if use_api:
-        console.print("\n[yellow]API automation not yet implemented.[/yellow]")
-        console.print("Configure API keys in .ldf/config.yaml to enable.")
+    return content
 
 
 def _build_audit_request(
@@ -256,6 +395,15 @@ Please review the following specifications and provide feedback on:
 - API design consistency
 - Dependency management
 - State management patterns
+"""
+    elif audit_type == "full":
+        content += """- Requirements completeness and clarity
+- Code quality and security vulnerabilities
+- Authentication and OWASP Top 10
+- Production readiness and monitoring
+- Missing requirements and coverage gaps
+- Boundary conditions and error handling
+- Architecture and scalability
 """
 
     content += "\n## Specifications\n\n"

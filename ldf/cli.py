@@ -243,8 +243,8 @@ def create_spec(name: str):
     "-t",
     "audit_type",
     type=click.Choice([
-        "spec-review", "code-audit", "security", "pre-launch",
-        "gap-analysis", "edge-cases", "architecture"
+        "spec-review", "code-audit", "security", "security-check", "pre-launch",
+        "gap-analysis", "edge-cases", "architecture", "full"
     ]),
     help="Type of audit request to generate",
 )
@@ -263,6 +263,16 @@ def create_spec(name: str):
 )
 @click.option("--api", is_flag=True, help="Use API automation (requires config)")
 @click.option(
+    "--agent",
+    type=click.Choice(["chatgpt", "gemini"]),
+    help="AI provider for API audit (requires --api)",
+)
+@click.option(
+    "--auto-import",
+    is_flag=True,
+    help="Automatically import API audit response",
+)
+@click.option(
     "--include-secrets",
     is_flag=True,
     help="Include potentially sensitive content (API keys, tokens) in export",
@@ -277,6 +287,8 @@ def audit(
     spec_name: str | None,
     import_file: str | None,
     api: bool,
+    agent: str | None,
+    auto_import: bool,
     include_secrets: bool,
     yes: bool,
 ):
@@ -288,13 +300,20 @@ def audit(
     Audit types:
 
     \b
-    - spec-review:   Completeness, clarity, edge cases
-    - code-audit:    Code quality, security, test coverage
-    - security:      Authentication, OWASP Top 10, data exposure
-    - pre-launch:    Production readiness, monitoring, rollback
-    - gap-analysis:  Missing requirements, coverage gaps
-    - edge-cases:    Boundary conditions, error handling
-    - architecture:  Component coupling, scalability, API design
+    - spec-review:    Completeness, clarity, edge cases
+    - code-audit:     Code quality, security, test coverage
+    - security:       Authentication, OWASP Top 10, data exposure
+    - security-check: Alias for security
+    - pre-launch:     Production readiness, monitoring, rollback
+    - gap-analysis:   Missing requirements, coverage gaps
+    - edge-cases:     Boundary conditions, error handling
+    - architecture:   Component coupling, scalability, API design
+    - full:           Run all audit types (API mode only)
+
+    API automation:
+
+    Configure API keys in .ldf/config.yaml under audit_api.chatgpt or
+    audit_api.gemini, then use --api --agent to run automated audits.
 
     Redacted patterns include:
 
@@ -310,14 +329,29 @@ def audit(
     caught, and some normal text may be redacted. Review output if needed.
 
     Examples:
-        ldf audit --type spec-review           # Review all specs
-        ldf audit --type security --spec auth  # Security audit on auth spec
-        ldf audit --type gap-analysis          # Find coverage gaps
-        ldf audit --import feedback.md         # Import audit feedback
+        ldf audit --type spec-review                    # Review all specs
+        ldf audit --type security --spec auth           # Security audit on auth spec
+        ldf audit --type gap-analysis                   # Find coverage gaps
+        ldf audit --import feedback.md                  # Import audit feedback
+        ldf audit --type security --api --agent chatgpt # API-based audit
+        ldf audit --type full --api --agent gemini --auto-import  # Full auto audit
     """
     from ldf.audit import run_audit
 
-    run_audit(audit_type, import_file, api, include_secrets, yes, spec_name)
+    # Normalize security-check to security
+    if audit_type == "security-check":
+        audit_type = "security"
+
+    run_audit(
+        audit_type=audit_type,
+        import_file=import_file,
+        use_api=api,
+        agent=agent,
+        auto_import=auto_import,
+        include_secrets=include_secrets,
+        skip_confirm=yes,
+        spec_name=spec_name,
+    )
 
 
 @main.command("mcp-config")
@@ -472,7 +506,8 @@ def status(json_output: bool):
         _print_check("guardrails.yaml", result.has_guardrails)
         _print_check("specs/", result.has_specs_dir)
         _print_check("templates/", result.has_templates)
-        _print_check("question-packs/", result.has_answerpacks_dir)
+        _print_check("question-packs/", result.has_question_packs_dir)
+        _print_check("answerpacks/", result.has_answerpacks_dir)
         _print_check("macros/", result.has_macros)
         _print_check("CLAUDE.md", result.has_claude_md)
         _print_check(".claude/commands/", result.has_claude_commands)

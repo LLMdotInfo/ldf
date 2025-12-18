@@ -21,7 +21,8 @@ Using multiple agents catches issues that a single agent might miss due to train
 |--------|-------------|
 | [spec-review.md](prompts/chatgpt/spec-review.md) | After drafting requirements or design |
 | [code-audit.md](prompts/chatgpt/code-audit.md) | After implementation, before merge |
-| [security-check.md](prompts/chatgpt/security-check.md) | For security-sensitive features |
+| [security.md](prompts/chatgpt/security.md) | For security-sensitive features |
+| [pre-launch.md](prompts/chatgpt/pre-launch.md) | Before production release |
 
 ### Gemini Prompts
 | Prompt | When to Use |
@@ -93,10 +94,11 @@ This updates the spec with audit findings.
 | Requirements | spec-review | ChatGPT | Draft complete |
 | Requirements | gap-analysis | Gemini | Before approval |
 | Design | architecture | Gemini | Draft complete |
-| Design | security-check | ChatGPT | If security-sensitive |
+| Design | security | ChatGPT | If security-sensitive |
 | Pre-Implementation | edge-cases | Gemini | After design approval |
 | Implementation | code-audit | ChatGPT | Before merge |
-| Pre-Launch | All | Both | Full review |
+| Pre-Launch | pre-launch | ChatGPT | Before release |
+| Pre-Launch | full | Both | Comprehensive review |
 
 ## Audit Templates
 
@@ -141,19 +143,25 @@ For teams wanting API automation, see [automation/README.md](automation/README.m
 **Prerequisites:**
 - OpenAI API key (for ChatGPT)
 - Google AI API key (for Gemini)
-- Environment configuration
+- Configuration in `.ldf/config.yaml`
 
 **Usage:**
 ```bash
-# Automated spec review
-ldf audit --type spec-review --spec user-auth --api
+# Automated spec review with ChatGPT
+ldf audit --type spec-review --spec user-auth --api --agent chatgpt
+
+# Gap analysis with Gemini
+ldf audit --type gap-analysis --spec user-auth --api --agent gemini
+
+# Full audit (all types) with auto-import
+ldf audit --type full --api --agent chatgpt --auto-import
 
 # This will:
 # 1. Generate audit request
-# 2. Send to ChatGPT API
+# 2. Send to the specified API
 # 3. Parse response
-# 4. Create audit-response.md
-# 5. Optionally auto-import
+# 4. Save to .ldf/audit-history/
+# 5. Auto-import if --auto-import flag is set
 ```
 
 ## FAQ

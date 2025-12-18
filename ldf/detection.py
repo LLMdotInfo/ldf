@@ -38,6 +38,7 @@ class DetectionResult:
     has_guardrails: bool
     has_specs_dir: bool
     has_answerpacks_dir: bool
+    has_question_packs_dir: bool
     has_templates: bool
     has_macros: bool
     has_claude_md: bool
@@ -63,6 +64,7 @@ class DetectionResult:
                 "guardrails": self.has_guardrails,
                 "specs_dir": self.has_specs_dir,
                 "answerpacks_dir": self.has_answerpacks_dir,
+                "question_packs_dir": self.has_question_packs_dir,
                 "templates": self.has_templates,
                 "macros": self.has_macros,
                 "claude_md": self.has_claude_md,
@@ -132,6 +134,7 @@ def detect_project_state(project_root: Path | None = None) -> DetectionResult:
             has_guardrails=False,
             has_specs_dir=False,
             has_answerpacks_dir=False,
+            has_question_packs_dir=False,
             has_templates=False,
             has_macros=False,
             has_claude_md=False,
@@ -151,6 +154,7 @@ def detect_project_state(project_root: Path | None = None) -> DetectionResult:
             has_guardrails=False,
             has_specs_dir=False,
             has_answerpacks_dir=False,
+            has_question_packs_dir=False,
             has_templates=False,
             has_macros=False,
             has_claude_md=False,
@@ -168,6 +172,7 @@ def detect_project_state(project_root: Path | None = None) -> DetectionResult:
     has_guardrails = (ldf_dir / "guardrails.yaml").exists()
     has_specs_dir = (ldf_dir / "specs").is_dir()
     has_answerpacks_dir = (ldf_dir / "answerpacks").is_dir()
+    has_question_packs_dir = (ldf_dir / "question-packs").is_dir()
     has_templates = all((ldf_dir / t).exists() for t in ["templates/requirements.md", "templates/design.md", "templates/tasks.md"])
     has_macros = (ldf_dir / "macros").is_dir() and any((ldf_dir / "macros").iterdir())
     has_claude_md = (project_root / "CLAUDE.md").exists()
@@ -247,6 +252,7 @@ def detect_project_state(project_root: Path | None = None) -> DetectionResult:
         has_guardrails=has_guardrails,
         has_specs_dir=has_specs_dir,
         has_answerpacks_dir=has_answerpacks_dir,
+        has_question_packs_dir=has_question_packs_dir,
         has_templates=has_templates,
         has_macros=has_macros,
         has_claude_md=has_claude_md,

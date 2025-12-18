@@ -26,27 +26,29 @@ pip install openai google-generativeai
 
 ### 2. Configure API Keys
 
-Create `.ldf/config.yaml`:
+Add to your `.ldf/config.yaml`:
 
 ```yaml
-# API Configuration (DO NOT commit this file!)
-automation:
-  openai:
+# API Configuration for automated audits
+audit_api:
+  chatgpt:
     api_key: ${OPENAI_API_KEY}  # From environment
-    model: gpt-4o
-    max_tokens: 4000
+    model: gpt-4
+    timeout: 120
+    max_tokens: 4096
 
-  google:
-    api_key: ${GOOGLE_AI_API_KEY}  # From environment
+  gemini:
+    api_key: ${GOOGLE_API_KEY}  # From environment
     model: gemini-pro
-    max_tokens: 4000
+    timeout: 120
+    max_tokens: 4096
 ```
 
-Or set environment variables:
+Set environment variables:
 
 ```bash
 export OPENAI_API_KEY="sk-..."
-export GOOGLE_AI_API_KEY="AIza..."
+export GOOGLE_API_KEY="AIza..."
 ```
 
 ### 3. Add to .gitignore
@@ -68,49 +70,61 @@ ldf audit --type spec-review --spec user-auth --api --agent chatgpt
 # Gap analysis with Gemini
 ldf audit --type gap-analysis --spec user-auth --api --agent gemini
 
-# Full audit (both agents)
-ldf audit --type full --spec user-auth --api
+# Full audit (all types sequentially)
+ldf audit --type full --api --agent chatgpt
 
-# Auto-import results
-ldf audit --type spec-review --spec user-auth --api --auto-import
+# Security audit with Gemini
+ldf audit --type security --api --agent gemini
+
+# Auto-import results (displays response inline)
+ldf audit --type spec-review --spec user-auth --api --agent chatgpt --auto-import
 ```
 
 ### Python API
 
 ```python
-from multi_agent.automation import ChatGPTAuditor, GeminiAuditor
+from ldf.audit_api import run_api_audit, load_api_config, AuditResponse
+import asyncio
 
-# ChatGPT audit
-auditor = ChatGPTAuditor()
-result = await auditor.audit_spec(
-    spec_content="...",
-    prompt_type="spec-review"
+# Load configuration from .ldf/config.yaml
+configs = load_api_config()
+
+# Run a ChatGPT audit
+response: AuditResponse = asyncio.run(
+    run_api_audit(
+        provider="chatgpt",
+        audit_type="spec-review",
+        prompt="Your audit request content here...",
+        spec_name="user-auth"  # optional
+    )
 )
 
-# Gemini audit
-auditor = GeminiAuditor()
-result = await auditor.audit_spec(
-    spec_content="...",
-    prompt_type="gap-analysis"
-)
+if response.success:
+    print(f"Audit complete: {response.content}")
+    print(f"Tokens used: {response.usage.get('total_tokens', 'N/A')}")
+else:
+    print(f"Audit failed: {response.errors}")
 ```
 
 ## Response Format
 
-Both clients return a standardized `AuditResult`:
+Both providers return a standardized `AuditResponse`:
 
 ```python
 @dataclass
-class AuditResult:
-    request_id: str
+class AuditResponse:
+    success: bool
+    provider: str  # "chatgpt" or "gemini"
     audit_type: str
-    agent: str
-    timestamp: datetime
-    assessment: str  # APPROVE | NEEDS_REVISION | REJECT
-    risk_level: str  # LOW | MEDIUM | HIGH | CRITICAL
-    issues: list[AuditIssue]
-    raw_response: str
+    spec_name: str | None
+    content: str  # Raw markdown response from the AI
+    timestamp: str
+    errors: list[str]  # Empty if success=True
+    usage: dict[str, Any]  # Token usage (provider-specific)
 ```
+
+Responses are automatically saved to `.ldf/audit-history/` with filename format:
+`{audit_type}-{spec_name}-{provider}-{timestamp}.md`
 
 ## Cost Considerations
 
@@ -123,15 +137,25 @@ Estimate 5-10 audits per feature = $0.50-2.00 per feature.
 
 ## Error Handling
 
+The `AuditResponse` object indicates success or failure:
+
 ```python
-try:
-    result = await auditor.audit_spec(content, prompt_type)
-except RateLimitError:
-    # Back off and retry
-except APIError as e:
-    # Log and fall back to manual
-except ContentFilterError:
-    # Content was blocked, use manual workflow
+response = asyncio.run(run_api_audit(provider, audit_type, prompt))
+
+if not response.success:
+    for error in response.errors:
+        if "timed out" in error:
+            # Increase timeout in config
+            pass
+        elif "Rate limit" in error:
+            # Back off and retry
+            pass
+        elif "not configured" in error:
+            # Check .ldf/config.yaml
+            pass
+        else:
+            # Log and fall back to manual workflow
+            print(f"API error: {error}")
 ```
 
 ## CI/CD Integration
@@ -152,7 +176,7 @@ jobs:
       - uses: actions/checkout@v3
 
       - name: Install LDF
-        run: pip install ldf
+        run: pip install 'ldf[automation]'
 
       - name: Run Spec Audit
         env:
@@ -160,15 +184,13 @@ jobs:
         run: |
           for spec in $(git diff --name-only origin/main -- '.ldf/specs/*/requirements.md'); do
             spec_name=$(dirname $spec | xargs basename)
-            ldf audit --type spec-review --spec $spec_name --api --output json
+            ldf audit --type spec-review --spec $spec_name --api --agent chatgpt
           done
 
-      - name: Check Results
+      - name: Check Audit History
         run: |
-          if grep -q '"assessment": "REJECT"' audit-results/*.json; then
-            echo "Spec audit failed"
-            exit 1
-          fi
+          # Review saved audit responses in .ldf/audit-history/
+          ls -la .ldf/audit-history/
 ```
 
 ## Limitations
@@ -187,13 +209,14 @@ jobs:
 - Consider self-hosted models for sensitive content
 - Audit logs should not contain sensitive spec content
 
-## Files
+## Implementation Files
 
 | File | Purpose |
 |------|---------|
-| `openai_client.py` | ChatGPT API wrapper |
-| `google_client.py` | Gemini API wrapper |
-| `config.example.yaml` | Configuration template |
+| `ldf/audit_api.py` | API integration module (ChatGPT + Gemini) |
+| `ldf/audit.py` | CLI integration and audit request generation |
+| `.ldf/config.yaml` | Project configuration (add audit_api section) |
+| `.ldf/audit-history/` | Saved audit responses |
 
 ## Troubleshooting
 

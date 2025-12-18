@@ -272,14 +272,25 @@ class TestAuditConfirmation:
 class TestApiMode:
     """Tests for API automation mode."""
 
-    def test_api_mode_not_implemented_message(self, temp_project_with_specs: Path, monkeypatch, capsys):
-        """Test that API mode shows not implemented message."""
+    def test_api_mode_requires_agent(self, temp_project_with_specs: Path, monkeypatch, capsys):
+        """Test that API mode requires --agent parameter."""
         monkeypatch.chdir(temp_project_with_specs)
 
         run_audit("spec-review", None, True, skip_confirm=True)
 
         captured = capsys.readouterr()
-        assert "API automation not yet implemented" in captured.out
+        assert "--api requires --agent" in captured.out
+        assert "chatgpt or gemini" in captured.out
+
+    def test_api_mode_unconfigured_provider(self, temp_project_with_specs: Path, monkeypatch, capsys):
+        """Test that API mode shows error for unconfigured provider."""
+        monkeypatch.chdir(temp_project_with_specs)
+
+        run_audit("spec-review", None, True, agent="chatgpt", skip_confirm=True)
+
+        captured = capsys.readouterr()
+        assert "not configured" in captured.out
+        assert "config.yaml" in captured.out
 
 
 class TestAllAuditTypes:

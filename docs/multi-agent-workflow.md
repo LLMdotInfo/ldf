@@ -41,10 +41,12 @@ ldf audit --import audit-response.md --spec user-auth
 |------|---------|------------|
 | Spec Review | `ldf audit --type spec-review` | ChatGPT |
 | Code Audit | `ldf audit --type code-audit` | ChatGPT |
-| Security Check | `ldf audit --type security-check` | ChatGPT |
+| Security | `ldf audit --type security` | ChatGPT |
+| Pre-Launch | `ldf audit --type pre-launch` | ChatGPT |
 | Gap Analysis | `ldf audit --type gap-analysis` | Gemini |
 | Edge Cases | `ldf audit --type edge-cases` | Gemini |
 | Architecture | `ldf audit --type architecture` | Gemini |
+| Full (All Types) | `ldf audit --type full` | Both |
 
 ## When to Audit
 
@@ -54,7 +56,8 @@ ldf audit --import audit-response.md --spec user-auth
 | After design complete | architecture |
 | Before implementation | edge-cases |
 | Before merge | code-audit |
-| Security-sensitive features | security-check |
+| Security-sensitive features | security |
+| Before production release | pre-launch, full |
 
 ## Detailed Documentation
 
@@ -72,7 +75,8 @@ See the [Multi-Agent README](../multi-agent/README.md).
 ### ChatGPT Prompts
 - [spec-review.md](../multi-agent/prompts/chatgpt/spec-review.md) - Review requirements and design specs
 - [code-audit.md](../multi-agent/prompts/chatgpt/code-audit.md) - Review implementation code
-- [security-check.md](../multi-agent/prompts/chatgpt/security-check.md) - Security-focused review
+- [security.md](../multi-agent/prompts/chatgpt/security.md) - Security-focused review
+- [pre-launch.md](../multi-agent/prompts/chatgpt/pre-launch.md) - Production readiness review
 
 ### Gemini Prompts
 - [gap-analysis.md](../multi-agent/prompts/gemini/gap-analysis.md) - Find missing requirements
