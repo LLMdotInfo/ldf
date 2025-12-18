@@ -530,3 +530,240 @@ class TestSkipDirs:
         assert "__pycache__" in SKIP_DIRS
         assert ".venv" in SKIP_DIRS
         assert "venv" in SKIP_DIRS
+
+
+class TestAnalyzeCodebaseEdgeCases:
+    """Tests for edge cases in analyze_existing_codebase."""
+
+    def test_framework_detection_read_error(self, tmp_path, monkeypatch):
+        """Test framework detection handles file read errors."""
+        # Create a project with files that will trigger framework search
+        (tmp_path / "requirements.txt").write_text("fastapi>=0.100.0")
+        (tmp_path / "app.py").write_text("from fastapi import FastAPI")
+
+        # Make one file unreadable by patching
+        original_read_text = Path.read_text
+
+        def mock_read_text(self, *args, **kwargs):
+            if "app.py" in str(self):
+                raise PermissionError("Cannot read file")
+            return original_read_text(self, *args, **kwargs)
+
+        monkeypatch.setattr(Path, "read_text", mock_read_text)
+
+        # Should not raise - exception is caught
+        ctx = analyze_existing_codebase(tmp_path)
+        assert ctx.project_root == tmp_path
+
+    def test_preset_detection_read_error(self, tmp_path, monkeypatch):
+        """Test preset detection handles file read errors."""
+        # Create config file
+        (tmp_path / "config.yaml").write_text("key: value")
+
+        original_read_text = Path.read_text
+
+        call_count = [0]
+
+        def mock_read_text(self, *args, **kwargs):
+            call_count[0] += 1
+            # Fail on content building phase
+            if call_count[0] > 1:
+                raise PermissionError("Cannot read file")
+            return original_read_text(self, *args, **kwargs)
+
+        monkeypatch.setattr(Path, "read_text", mock_read_text)
+
+        # Should not raise - exception is caught
+        ctx = analyze_existing_codebase(tmp_path)
+        assert ctx.suggested_preset == "custom"
+
+
+class TestImportBackwardsFillEdgeCases:
+    """Tests for edge cases in import_backwards_fill."""
+
+    def test_warns_missing_answers_field(self, tmp_path):
+        """Test warning for missing 'answers' field in answerpack."""
+        ldf_dir = tmp_path / ".ldf"
+        ldf_dir.mkdir()
+        (ldf_dir / "answerpacks").mkdir()
+        (ldf_dir / "specs").mkdir()
+
+        content = """
+# === ANSWERPACK: security.yaml ===
+pack: security
+feature: test
+"""
+
+        result = import_backwards_fill(content, tmp_path, "test-feature")
+
+        assert any("Missing 'answers' field" in w for w in result.warnings)
+
+    def test_warns_spec_no_header(self, tmp_path):
+        """Test warning when spec content doesn't start with header."""
+        ldf_dir = tmp_path / ".ldf"
+        ldf_dir.mkdir()
+        (ldf_dir / "answerpacks").mkdir()
+        (ldf_dir / "specs").mkdir()
+
+        content = """
+# === SPEC: requirements.md ===
+Not a header, just text content.
+Some more text.
+"""
+
+        result = import_backwards_fill(content, tmp_path, "test-feature")
+
+        assert any("doesn't start with a markdown header" in w for w in result.warnings)
+
+
+class TestPrintConversionContext:
+    """Tests for print_conversion_context function."""
+
+    def test_prints_no_languages_detected(self, tmp_path, capsys):
+        """Test printing when no languages are detected."""
+        from ldf.convert import print_conversion_context
+
+        ctx = ConversionContext(
+            project_root=tmp_path,
+            detected_languages=[],
+            detected_frameworks=[],
+            suggested_preset="custom",
+            suggested_question_packs=[],
+        )
+
+        print_conversion_context(ctx)
+
+        captured = capsys.readouterr()
+        assert "None detected" in captured.out
+
+    def test_prints_no_frameworks_detected(self, tmp_path, capsys):
+        """Test printing when no frameworks are detected."""
+        from ldf.convert import print_conversion_context
+
+        ctx = ConversionContext(
+            project_root=tmp_path,
+            detected_languages=["python"],
+            detected_frameworks=[],
+            suggested_preset="custom",
+            suggested_question_packs=["security"],
+        )
+
+        print_conversion_context(ctx)
+
+        captured = capsys.readouterr()
+        assert "python" in captured.out
+        assert "None detected" in captured.out
+
+    def test_prints_full_context(self, tmp_path, capsys):
+        """Test printing full context with all fields."""
+        from ldf.convert import print_conversion_context
+
+        ctx = ConversionContext(
+            project_root=tmp_path,
+            detected_languages=["python", "typescript"],
+            detected_frameworks=["fastapi", "react"],
+            suggested_preset="saas",
+            suggested_question_packs=["security", "testing"],
+            source_files=[Path("src/main.py")],
+            existing_tests=[Path("tests/test_main.py")],
+            existing_docs=[Path("README.md")],
+            config_files=[Path("pyproject.toml")],
+            existing_api_files=[Path("openapi.yaml")],
+        )
+
+        print_conversion_context(ctx)
+
+        captured = capsys.readouterr()
+        assert "python, typescript" in captured.out
+        assert "fastapi, react" in captured.out
+        assert "saas" in captured.out
+        assert "Source files: 1" in captured.out
+
+
+class TestPrintImportResult:
+    """Tests for print_import_result function."""
+
+    def test_prints_files_created(self, capsys):
+        """Test printing files created section."""
+        from ldf.convert import print_import_result
+
+        result = ImportResult(
+            success=True,
+            spec_name="my-feature",
+            files_created=["specs/my-feature/requirements.md", "answerpacks/my-feature/security.yaml"],
+        )
+
+        print_import_result(result)
+
+        captured = capsys.readouterr()
+        assert "Files Created" in captured.out
+        assert "specs/my-feature/requirements.md" in captured.out
+
+    def test_prints_files_skipped(self, capsys):
+        """Test printing files skipped section."""
+        from ldf.convert import print_import_result
+
+        result = ImportResult(
+            success=True,
+            spec_name="my-feature",
+            files_created=["specs/my-feature/requirements.md"],
+            files_skipped=["specs/my-feature/design.md"],
+        )
+
+        print_import_result(result)
+
+        captured = capsys.readouterr()
+        assert "Files Skipped" in captured.out
+        assert "design.md" in captured.out
+
+    def test_prints_warnings(self, capsys):
+        """Test printing warnings section."""
+        from ldf.convert import print_import_result
+
+        result = ImportResult(
+            success=True,
+            spec_name="my-feature",
+            files_created=["specs/my-feature/requirements.md"],
+            warnings=["Missing expected file: tasks.md"],
+        )
+
+        print_import_result(result)
+
+        captured = capsys.readouterr()
+        assert "Warnings" in captured.out
+        assert "Missing expected file: tasks.md" in captured.out
+
+    def test_prints_success_message(self, capsys):
+        """Test printing success message with spec location."""
+        from ldf.convert import print_import_result
+
+        result = ImportResult(
+            success=True,
+            spec_name="my-feature",
+            files_created=["specs/my-feature/requirements.md"],
+        )
+
+        print_import_result(result)
+
+        captured = capsys.readouterr()
+        assert "Import complete" in captured.out
+        assert "my-feature" in captured.out
+        assert ".ldf/specs/my-feature/" in captured.out
+        assert ".ldf/answerpacks/my-feature/" in captured.out
+
+    def test_prints_failure_message(self, capsys):
+        """Test printing failure message."""
+        from ldf.convert import print_import_result
+
+        result = ImportResult(
+            success=False,
+            spec_name="my-feature",
+            errors=["Failed to parse YAML"],
+        )
+
+        print_import_result(result)
+
+        captured = capsys.readouterr()
+        assert "Import failed" in captured.out
+        assert "Errors" in captured.out
+        assert "Failed to parse YAML" in captured.out

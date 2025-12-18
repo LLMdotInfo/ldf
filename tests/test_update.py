@@ -1,16 +1,27 @@
 """Tests for LDF update functionality."""
 
+from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
 from ldf import __version__
 from ldf.init import FRAMEWORK_DIR, compute_file_checksum, initialize_project
 from ldf.update import (
+    Conflict,
+    FileChange,
     UpdateDiff,
+    UpdateResult,
+    _copy_framework_file,
+    _diff_question_packs,
+    _is_file_modified,
     apply_updates,
     check_for_updates,
     get_update_diff,
     load_project_config,
+    print_update_check,
+    print_update_diff,
+    print_update_result,
     save_project_config,
 )
 
@@ -337,3 +348,444 @@ class TestEdgeCases:
         # Should return empty/default values without crashing
         assert info.current_version == "0.0.0"
         assert info.updatable_components == []
+
+
+class TestIsFileModified:
+    """Tests for _is_file_modified function."""
+
+    def test_returns_true_when_no_checksum(self, temp_project):
+        """Should return True when no checksum is stored."""
+        config = load_project_config(temp_project)
+        config["_checksums"] = {}
+        save_project_config(temp_project, config)
+
+        result = _is_file_modified(temp_project, "templates/design.md", config)
+        assert result is True
+
+    def test_returns_true_when_file_missing(self, temp_project):
+        """Should return True when file doesn't exist."""
+        config = load_project_config(temp_project)
+        config["_checksums"]["nonexistent/file.md"] = "somechecksum"
+
+        result = _is_file_modified(temp_project, "nonexistent/file.md", config)
+        assert result is True
+
+    def test_returns_false_when_checksums_match(self, temp_project):
+        """Should return False when checksums match."""
+        config = load_project_config(temp_project)
+        # Get actual checksum of existing file
+        file_path = temp_project / ".ldf" / "templates" / "design.md"
+        actual_checksum = compute_file_checksum(file_path)
+        config["_checksums"]["templates/design.md"] = actual_checksum
+        save_project_config(temp_project, config)
+
+        result = _is_file_modified(temp_project, "templates/design.md", config)
+        assert result is False
+
+
+class TestDiffQuestionPacks:
+    """Tests for _diff_question_packs function."""
+
+    def test_handles_missing_dest_dir(self, tmp_path):
+        """Should handle when question-packs dir doesn't exist."""
+        project_root = tmp_path / "project"
+        ldf_dir = project_root / ".ldf"
+        ldf_dir.mkdir(parents=True)
+
+        config = {"question_packs": ["security"]}
+        diff = UpdateDiff()
+
+        _diff_question_packs(project_root, config, diff)
+
+        # Should return without adding anything
+        assert len(diff.files_to_add) == 0
+
+    def test_handles_pack_not_in_framework(self, temp_project):
+        """Should handle packs that don't exist in framework."""
+        config = load_project_config(temp_project)
+        config["question_packs"] = ["nonexistent-pack"]
+        save_project_config(temp_project, config)
+
+        diff = UpdateDiff()
+        _diff_question_packs(temp_project, config, diff)
+
+        # Should not add any files for nonexistent pack
+        assert not any("nonexistent-pack" in c.path for c in diff.files_to_add)
+
+    def test_adds_missing_pack_from_dest(self, temp_project):
+        """Should add pack if it exists in framework but not in project."""
+        # Add a new pack to config that doesn't exist in project
+        config = load_project_config(temp_project)
+        config["question_packs"].append("api-design")  # A pack from framework
+        save_project_config(temp_project, config)
+
+        # Remove the pack file from project
+        pack_path = temp_project / ".ldf" / "question-packs" / "api-design.yaml"
+        if pack_path.exists():
+            pack_path.unlink()
+
+        diff = UpdateDiff()
+        _diff_question_packs(temp_project, config, diff)
+
+        # Should add the pack
+        add_paths = [c.path for c in diff.files_to_add]
+        assert "question-packs/api-design.yaml" in add_paths
+
+
+class TestCopyFrameworkFile:
+    """Tests for _copy_framework_file function."""
+
+    def test_copies_template_file(self, temp_project):
+        """Should copy template file from framework."""
+        ldf_dir = temp_project / ".ldf"
+        checksums = {}
+
+        _copy_framework_file(ldf_dir, "templates/design.md", checksums)
+
+        assert (ldf_dir / "templates" / "design.md").exists()
+        assert "templates/design.md" in checksums
+
+    def test_copies_macro_file(self, temp_project):
+        """Should copy macro file from framework."""
+        ldf_dir = temp_project / ".ldf"
+        checksums = {}
+
+        _copy_framework_file(ldf_dir, "macros/clarify-first.md", checksums)
+
+        assert (ldf_dir / "macros" / "clarify-first.md").exists()
+        assert "macros/clarify-first.md" in checksums
+
+    def test_copies_question_pack_from_core(self, temp_project):
+        """Should copy question pack from core directory."""
+        ldf_dir = temp_project / ".ldf"
+        checksums = {}
+
+        _copy_framework_file(ldf_dir, "question-packs/security.yaml", checksums)
+
+        assert (ldf_dir / "question-packs" / "security.yaml").exists()
+        assert "question-packs/security.yaml" in checksums
+
+    def test_copies_question_pack_from_domain(self, temp_project):
+        """Should copy question pack from domain directory if not in core."""
+        from ldf.update import FRAMEWORK_DIR
+
+        ldf_dir = temp_project / ".ldf"
+        checksums = {}
+
+        # Create a mock domain pack (domain directory may not exist)
+        domain_dir = FRAMEWORK_DIR / "question-packs" / "domain"
+        domain_dir.mkdir(parents=True, exist_ok=True)
+        domain_pack = domain_dir / "fintech.yaml"
+        domain_pack.write_text("questions:\n  - id: test\n    text: Test question\n")
+
+        try:
+            _copy_framework_file(ldf_dir, "question-packs/fintech.yaml", checksums)
+            assert (ldf_dir / "question-packs" / "fintech.yaml").exists()
+        finally:
+            # Clean up the mock domain pack
+            if domain_pack.exists():
+                domain_pack.unlink()
+            # Only remove domain dir if it's empty
+            if domain_dir.exists() and not any(domain_dir.iterdir()):
+                domain_dir.rmdir()
+
+    def test_raises_for_unknown_component(self, temp_project):
+        """Should raise ValueError for unknown component."""
+        ldf_dir = temp_project / ".ldf"
+        checksums = {}
+
+        with pytest.raises(ValueError, match="Unknown component"):
+            _copy_framework_file(ldf_dir, "unknown/file.md", checksums)
+
+    def test_raises_for_missing_source(self, temp_project):
+        """Should raise FileNotFoundError for missing source file."""
+        ldf_dir = temp_project / ".ldf"
+        checksums = {}
+
+        with pytest.raises(FileNotFoundError, match="Source file not found"):
+            _copy_framework_file(ldf_dir, "templates/nonexistent.md", checksums)
+
+
+class TestApplyUpdatesEdgeCases:
+    """Edge case tests for apply_updates."""
+
+    def test_handles_add_error(self, temp_project, monkeypatch):
+        """Should handle errors during file addition."""
+        # Modify template to trigger update
+        template_path = temp_project / ".ldf" / "templates" / "design.md"
+        template_path.unlink()  # Remove file to trigger add
+
+        # Mock _copy_framework_file to fail
+        def mock_copy(*args, **kwargs):
+            raise PermissionError("Cannot write file")
+
+        monkeypatch.setattr("ldf.update._copy_framework_file", mock_copy)
+
+        result = apply_updates(temp_project, components=["templates"])
+
+        assert result.success is False
+        assert len(result.errors) > 0
+
+    def test_handles_update_error(self, temp_project, monkeypatch):
+        """Should handle errors during file update."""
+        # Modify template to trigger update
+        template_path = temp_project / ".ldf" / "templates" / "design.md"
+        template_path.write_text("# Modified\n")
+
+        # Mock _copy_framework_file to fail
+        def mock_copy(*args, **kwargs):
+            raise IOError("Disk full")
+
+        monkeypatch.setattr("ldf.update._copy_framework_file", mock_copy)
+
+        result = apply_updates(temp_project, components=["templates"])
+
+        assert result.success is False
+        assert any("Failed to update" in e for e in result.errors)
+
+    def test_keep_local_resolution(self, temp_project):
+        """Should preserve local file with keep_local resolution."""
+        # Modify a question pack
+        pack_path = temp_project / ".ldf" / "question-packs" / "security.yaml"
+        custom_content = "# Keep my content\n"
+        pack_path.write_text(custom_content)
+
+        # Simulate conflict
+        config = load_project_config(temp_project)
+        config["_checksums"]["question-packs/security.yaml"] = "fake_checksum"
+        save_project_config(temp_project, config)
+
+        result = apply_updates(
+            temp_project,
+            components=["question-packs"],
+            conflict_resolutions={"question-packs/security.yaml": "keep_local"},
+        )
+
+        assert result.success is True
+        assert any("kept local" in f for f in result.files_skipped)
+        assert pack_path.read_text() == custom_content
+
+    def test_dry_run_with_conflict_resolution(self, temp_project):
+        """Should show would-replace message in dry run."""
+        # Modify a question pack
+        pack_path = temp_project / ".ldf" / "question-packs" / "security.yaml"
+        pack_path.write_text("# Modified\n")
+
+        # Simulate conflict
+        config = load_project_config(temp_project)
+        config["_checksums"]["question-packs/security.yaml"] = "fake_checksum"
+        save_project_config(temp_project, config)
+
+        result = apply_updates(
+            temp_project,
+            components=["question-packs"],
+            conflict_resolutions={"question-packs/security.yaml": "use_framework"},
+            dry_run=True,
+        )
+
+        assert result.success is True
+        assert any("would replace" in f for f in result.files_updated)
+
+    def test_conflict_use_framework_error(self, temp_project, monkeypatch):
+        """Should handle error when replacing conflict file."""
+        # Modify a question pack
+        pack_path = temp_project / ".ldf" / "question-packs" / "security.yaml"
+        pack_path.write_text("# Modified\n")
+
+        # Simulate conflict
+        config = load_project_config(temp_project)
+        config["_checksums"]["question-packs/security.yaml"] = "fake_checksum"
+        save_project_config(temp_project, config)
+
+        # Mock _copy_framework_file to fail
+        def mock_copy(*args, **kwargs):
+            raise IOError("Write error")
+
+        monkeypatch.setattr("ldf.update._copy_framework_file", mock_copy)
+
+        result = apply_updates(
+            temp_project,
+            components=["question-packs"],
+            conflict_resolutions={"question-packs/security.yaml": "use_framework"},
+        )
+
+        assert result.success is False
+
+
+class TestPrintUpdateCheck:
+    """Tests for print_update_check function."""
+
+    def test_prints_up_to_date(self, temp_project, capsys):
+        """Should print up to date message when no updates."""
+        from ldf.update import UpdateInfo
+
+        info = UpdateInfo(
+            current_version=__version__,
+            latest_version=__version__,
+            has_updates=False,
+            updatable_components=["templates"],
+        )
+
+        print_update_check(info)
+
+        captured = capsys.readouterr()
+        assert "up to date" in captured.out
+
+    def test_prints_updates_available(self, capsys):
+        """Should print updates available message."""
+        from ldf.update import UpdateInfo
+
+        info = UpdateInfo(
+            current_version="0.0.1",
+            latest_version=__version__,
+            has_updates=True,
+            updatable_components=["templates", "macros"],
+        )
+
+        print_update_check(info)
+
+        captured = capsys.readouterr()
+        assert "Updates available" in captured.out
+        assert "templates" in captured.out
+        assert "macros" in captured.out
+
+
+class TestPrintUpdateDiff:
+    """Tests for print_update_diff function."""
+
+    def test_prints_all_change_types(self, capsys):
+        """Should print all change types."""
+        diff = UpdateDiff(
+            files_to_add=[FileChange("templates/new.md", "add", "New file")],
+            files_to_update=[FileChange("templates/design.md", "update", "Updated")],
+            conflicts=[Conflict("question-packs/security.yaml", "user_modified")],
+            files_unchanged=["macros/clarify-first.md"],
+        )
+
+        print_update_diff(diff)
+
+        captured = capsys.readouterr()
+        assert "+" in captured.out  # Add symbol
+        assert "~" in captured.out  # Update symbol
+        assert "!" in captured.out  # Conflict symbol
+        assert "=" in captured.out  # Unchanged symbol
+
+    def test_prints_dry_run_message(self, capsys):
+        """Should print dry run preview message."""
+        diff = UpdateDiff(files_to_update=[FileChange("templates/design.md", "update", "Updated")])
+
+        print_update_diff(diff, dry_run=True)
+
+        captured = capsys.readouterr()
+        assert "Preview of changes" in captured.out
+        assert "Would update" in captured.out
+
+    def test_prints_no_changes_message(self, capsys):
+        """Should print no changes message."""
+        diff = UpdateDiff()
+
+        print_update_diff(diff)
+
+        captured = capsys.readouterr()
+        assert "No changes needed" in captured.out
+
+    def test_prints_conflict_summary(self, capsys):
+        """Should print conflict summary."""
+        diff = UpdateDiff(
+            conflicts=[
+                Conflict("file1.yaml", "user_modified"),
+                Conflict("file2.yaml", "user_modified"),
+            ]
+        )
+
+        print_update_diff(diff)
+
+        captured = capsys.readouterr()
+        assert "2 file(s) with local changes" in captured.out
+
+
+class TestPrintUpdateResult:
+    """Tests for print_update_result function."""
+
+    def test_prints_updated_files(self, capsys):
+        """Should print updated files list."""
+        result = UpdateResult(
+            success=True,
+            files_updated=["[+] templates/new.md", "[~] templates/design.md"],
+        )
+
+        print_update_result(result)
+
+        captured = capsys.readouterr()
+        assert "Updated files" in captured.out
+        assert "templates/new.md" in captured.out
+
+    def test_prints_skipped_files(self, capsys):
+        """Should print skipped files list."""
+        result = UpdateResult(
+            success=True,
+            files_skipped=["[!] question-packs/security.yaml (skipped)"],
+        )
+
+        print_update_result(result)
+
+        captured = capsys.readouterr()
+        assert "Skipped files" in captured.out
+        assert "security.yaml" in captured.out
+
+    def test_prints_errors(self, capsys):
+        """Should print error messages."""
+        result = UpdateResult(
+            success=False,
+            errors=["Failed to write templates/design.md", "Permission denied"],
+        )
+
+        print_update_result(result)
+
+        captured = capsys.readouterr()
+        assert "Errors" in captured.out
+        assert "Failed to write" in captured.out
+
+    def test_prints_success_message(self, capsys):
+        """Should print success message."""
+        result = UpdateResult(success=True)
+
+        print_update_result(result)
+
+        captured = capsys.readouterr()
+        assert "Update complete" in captured.out
+
+    def test_prints_failure_message(self, capsys):
+        """Should print failure message."""
+        result = UpdateResult(success=False, errors=["Error"])
+
+        print_update_result(result)
+
+        captured = capsys.readouterr()
+        assert "completed with errors" in captured.out
+
+
+class TestGetUpdateDiffEdgeCases:
+    """Edge case tests for get_update_diff."""
+
+    def test_ignores_unknown_component(self, temp_project):
+        """Should ignore unknown components."""
+        diff = get_update_diff(temp_project, components=["unknown-component"])
+
+        assert len(diff.files_to_add) == 0
+        assert len(diff.files_to_update) == 0
+
+    def test_source_file_missing(self, temp_project, monkeypatch):
+        """Should handle missing source file in framework."""
+        # Mock COMPONENTS to have a file that doesn't exist
+        from ldf import update
+
+        orig_components = update.COMPONENTS.copy()
+        update.COMPONENTS["templates"]["files"] = ["nonexistent.md"]
+
+        try:
+            diff = get_update_diff(temp_project, components=["templates"])
+            # Should complete without error
+            assert isinstance(diff, UpdateDiff)
+        finally:
+            update.COMPONENTS = orig_components

@@ -419,3 +419,159 @@ class TestGetSpecsSummary:
 
         assert len(summary) == 1
         assert summary[0]["name"] == "valid-spec"
+
+
+class TestDetectProjectStateEdgeCases:
+    """Edge case tests for detect_project_state."""
+
+    def test_config_is_list_not_dict(self, tmp_path):
+        """Test detection when config.yaml contains a list instead of dict."""
+        ldf_dir = tmp_path / ".ldf"
+        ldf_dir.mkdir()
+
+        (ldf_dir / "config.yaml").write_text("- item1\n- item2\n- item3")
+        (ldf_dir / "guardrails.yaml").write_text("guardrails: []")
+        (ldf_dir / "specs").mkdir()
+        (ldf_dir / "answerpacks").mkdir()
+
+        result = detect_project_state(tmp_path)
+
+        assert result.state == ProjectState.CORRUPTED
+        assert any("invalid format" in f for f in result.invalid_files)
+
+    def test_config_read_error(self, tmp_path, monkeypatch):
+        """Test detection when config.yaml cannot be read."""
+        from pathlib import Path as PathClass
+
+        ldf_dir = tmp_path / ".ldf"
+        ldf_dir.mkdir()
+        (ldf_dir / "config.yaml").write_text("valid: yaml")
+        (ldf_dir / "guardrails.yaml").write_text("guardrails: []")
+        (ldf_dir / "specs").mkdir()
+        (ldf_dir / "answerpacks").mkdir()
+
+        # Mock open to raise an exception
+        original_open = open
+
+        def mock_open(file, *args, **kwargs):
+            if "config.yaml" in str(file):
+                raise PermissionError("Access denied")
+            return original_open(file, *args, **kwargs)
+
+        monkeypatch.setattr("builtins.open", mock_open)
+
+        result = detect_project_state(tmp_path)
+
+        assert result.state == ProjectState.CORRUPTED
+        assert any("read error" in f for f in result.invalid_files)
+
+    def test_project_newer_than_installed(self, tmp_path):
+        """Test detection when project version is newer than installed."""
+        ldf_dir = tmp_path / ".ldf"
+        ldf_dir.mkdir()
+
+        # Set a "future" version
+        (ldf_dir / "config.yaml").write_text("framework_version: '999.999.999'")
+        (ldf_dir / "guardrails.yaml").write_text("guardrails: []")
+        (ldf_dir / "specs").mkdir()
+        (ldf_dir / "answerpacks").mkdir()
+        (ldf_dir / "templates").mkdir()
+        (ldf_dir / "question-packs").mkdir()
+        (ldf_dir / "macros").mkdir()
+        (ldf_dir / "templates" / "requirements.md").write_text("#")
+        (ldf_dir / "templates" / "design.md").write_text("#")
+        (ldf_dir / "templates" / "tasks.md").write_text("#")
+        (ldf_dir / "macros" / "clarify-first.md").write_text("#")
+        (ldf_dir / "macros" / "coverage-gate.md").write_text("#")
+        (ldf_dir / "macros" / "task-guardrails.md").write_text("#")
+        (ldf_dir / "question-packs" / "core.yaml").write_text("pack: core")
+
+        result = detect_project_state(tmp_path)
+
+        assert result.state == ProjectState.CURRENT
+        assert "newer LDF" in result.recommended_action
+
+    def test_version_comparison_without_packaging(self, tmp_path, monkeypatch):
+        """Test version comparison when packaging module unavailable."""
+        ldf_dir = tmp_path / ".ldf"
+        ldf_dir.mkdir()
+
+        (ldf_dir / "config.yaml").write_text("framework_version: '0.0.1'")
+        (ldf_dir / "guardrails.yaml").write_text("guardrails: []")
+        (ldf_dir / "specs").mkdir()
+        (ldf_dir / "answerpacks").mkdir()
+        (ldf_dir / "templates").mkdir()
+        (ldf_dir / "question-packs").mkdir()
+        (ldf_dir / "macros").mkdir()
+        (ldf_dir / "templates" / "requirements.md").write_text("#")
+        (ldf_dir / "templates" / "design.md").write_text("#")
+        (ldf_dir / "templates" / "tasks.md").write_text("#")
+        (ldf_dir / "macros" / "clarify-first.md").write_text("#")
+        (ldf_dir / "macros" / "coverage-gate.md").write_text("#")
+        (ldf_dir / "macros" / "task-guardrails.md").write_text("#")
+        (ldf_dir / "question-packs" / "core.yaml").write_text("pack: core")
+
+        # Mock packaging.version.Version to raise an exception
+        import sys
+        original_modules = dict(sys.modules)
+        if "packaging.version" in sys.modules:
+            del sys.modules["packaging.version"]
+        if "packaging" in sys.modules:
+            del sys.modules["packaging"]
+
+        # Force the fallback path by making Version raise
+        from unittest.mock import MagicMock
+        mock_packaging = MagicMock()
+        mock_packaging.version.Version.side_effect = Exception("No packaging")
+        sys.modules["packaging"] = mock_packaging
+        sys.modules["packaging.version"] = mock_packaging.version
+
+        try:
+            result = detect_project_state(tmp_path)
+            assert result.state == ProjectState.OUTDATED
+            assert "Version mismatch" in result.recommended_action or "update" in result.recommended_command.lower()
+        finally:
+            sys.modules.update(original_modules)
+
+
+class TestCheckLdfCompletenessEdgeCases:
+    """Edge case tests for check_ldf_completeness."""
+
+    def test_missing_macros_in_existing_dir(self, tmp_path):
+        """Test detection of missing macros when macros dir exists."""
+        ldf_dir = tmp_path / ".ldf"
+        ldf_dir.mkdir()
+
+        (ldf_dir / "config.yaml").write_text("framework_version: '0.1.0'")
+        (ldf_dir / "guardrails.yaml").write_text("guardrails: []")
+        for d in REQUIRED_DIRS:
+            (ldf_dir / d).mkdir()
+        (ldf_dir / "macros").mkdir()  # Create macros dir but leave it empty
+        (ldf_dir / "templates" / "requirements.md").write_text("#")
+        (ldf_dir / "templates" / "design.md").write_text("#")
+        (ldf_dir / "templates" / "tasks.md").write_text("#")
+        (ldf_dir / "question-packs" / "core.yaml").write_text("pack: core")
+
+        missing, invalid = check_ldf_completeness(ldf_dir)
+
+        # Should be missing macro files
+        assert any("clarify-first" in m for m in missing)
+
+    def test_empty_question_packs_dir(self, tmp_path):
+        """Test detection of empty question-packs directory."""
+        ldf_dir = tmp_path / ".ldf"
+        ldf_dir.mkdir()
+
+        (ldf_dir / "config.yaml").write_text("framework_version: '0.1.0'")
+        (ldf_dir / "guardrails.yaml").write_text("guardrails: []")
+        for d in REQUIRED_DIRS:
+            (ldf_dir / d).mkdir()
+        (ldf_dir / "templates" / "requirements.md").write_text("#")
+        (ldf_dir / "templates" / "design.md").write_text("#")
+        (ldf_dir / "templates" / "tasks.md").write_text("#")
+        # Don't create any .yaml files in question-packs
+
+        missing, invalid = check_ldf_completeness(ldf_dir)
+
+        # Should indicate missing question packs
+        assert any("no packs found" in m for m in missing)

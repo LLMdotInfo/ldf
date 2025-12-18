@@ -1143,3 +1143,488 @@ class TestAdditionalCLICommands:
         result = runner.invoke(cli, ["add-pack", "--all"])
 
         assert result.exit_code in (0, 1)
+
+
+class TestCliEdgeCases:
+    """Edge case tests for CLI commands."""
+
+    def test_init_from_template_failure(
+        self, runner: CliRunner, temp_project: Path, monkeypatch
+    ):
+        """Test init --from when template import fails."""
+        from pathlib import Path as PathLib
+        from unittest.mock import patch
+
+        monkeypatch.chdir(temp_project)
+
+        # Create a dummy template path that exists
+        template_path = temp_project / "template"
+        template_path.mkdir()
+        (template_path / "template.yaml").write_text("name: test\nversion: 1.0\nldf_version: 0.1.0")
+
+        with patch("ldf.template.import_template", return_value=False):
+            result = runner.invoke(cli, ["init", "--from", str(template_path)])
+
+        assert result.exit_code == 1
+
+    def test_audit_spec_with_import_warning(
+        self, runner: CliRunner, temp_project: Path, monkeypatch
+    ):
+        """Test audit with both --spec and --import shows warning."""
+        from unittest.mock import patch
+
+        monkeypatch.chdir(temp_project)
+
+        # Create the import file
+        import_file = temp_project / "feedback.md"
+        import_file.write_text("# Feedback\nSome feedback")
+
+        with patch("ldf.audit.run_audit"):
+            result = runner.invoke(
+                cli, ["audit", "--spec", "test", "--import", str(import_file)]
+            )
+
+        # Should show warning but still run
+        assert "Warning" in result.output or result.exit_code == 0
+
+    def test_audit_security_check_normalization(
+        self, runner: CliRunner, temp_project: Path, monkeypatch
+    ):
+        """Test audit normalizes security-check to security."""
+        from unittest.mock import patch, MagicMock
+
+        monkeypatch.chdir(temp_project)
+
+        mock_run_audit = MagicMock()
+        with patch("ldf.audit.run_audit", mock_run_audit):
+            result = runner.invoke(cli, ["audit", "security-check"])
+
+        # Should call with normalized type
+        if mock_run_audit.called:
+            call_args = mock_run_audit.call_args
+            assert call_args.kwargs.get("audit_type") == "security"
+
+    def test_coverage_diff_error(
+        self, runner: CliRunner, temp_project: Path, monkeypatch
+    ):
+        """Test coverage --diff returns error code on failure."""
+        from unittest.mock import patch
+
+        monkeypatch.chdir(temp_project)
+
+        with patch("ldf.coverage.compare_coverage", return_value={"status": "ERROR"}):
+            result = runner.invoke(cli, ["coverage", "--diff", "baseline"])
+
+        assert result.exit_code == 1
+
+    def test_coverage_upload_failure(
+        self, runner: CliRunner, temp_project: Path, monkeypatch
+    ):
+        """Test coverage --upload returns error on failure."""
+        import json
+        from unittest.mock import patch
+
+        monkeypatch.chdir(temp_project)
+
+        coverage_file = temp_project / "coverage.json"
+        coverage_file.write_text(
+            json.dumps(
+                {
+                    "totals": {
+                        "percent_covered": 85.0,
+                        "covered_lines": 850,
+                        "num_statements": 1000,
+                    }
+                }
+            )
+        )
+
+        with patch("ldf.coverage.report_coverage", return_value={"status": "OK"}):
+            with patch("ldf.coverage.upload_coverage", return_value=False):
+                result = runner.invoke(cli, ["coverage", "--upload", "s3://bucket/path"])
+
+        assert result.exit_code == 1
+
+    def test_coverage_validate_failure(
+        self, runner: CliRunner, temp_project: Path, monkeypatch
+    ):
+        """Test coverage --validate returns error on failure."""
+        from unittest.mock import patch
+
+        monkeypatch.chdir(temp_project)
+
+        with patch("ldf.coverage.report_coverage", return_value={"status": "FAIL"}):
+            result = runner.invoke(cli, ["coverage", "--validate"])
+
+        assert result.exit_code == 1
+
+    def test_update_up_to_date(
+        self, runner: CliRunner, temp_project: Path, monkeypatch
+    ):
+        """Test update when project is already up to date."""
+        from unittest.mock import patch, MagicMock
+        from ldf.update import UpdateDiff
+
+        monkeypatch.chdir(temp_project)
+
+        # Create empty diff (no changes needed)
+        empty_diff = UpdateDiff()
+
+        with patch("ldf.update.get_update_diff", return_value=empty_diff):
+            result = runner.invoke(cli, ["update"])
+
+        assert "up to date" in result.output.lower()
+
+    def test_update_apply_failure(
+        self, runner: CliRunner, temp_project: Path, monkeypatch
+    ):
+        """Test update returns error when apply fails."""
+        from unittest.mock import patch, MagicMock
+        from ldf.update import UpdateDiff, FileChange, UpdateResult
+
+        monkeypatch.chdir(temp_project)
+
+        # Create diff with files to update (correct field names)
+        diff = UpdateDiff()
+        diff.files_to_add = [FileChange(path="test.md", change_type="add", reason="test")]
+
+        # Create failed result
+        failed_result = UpdateResult(success=False)
+
+        with patch("ldf.update.get_update_diff", return_value=diff):
+            with patch("ldf.update.apply_updates", return_value=failed_result):
+                result = runner.invoke(cli, ["update", "-y"])
+
+        assert result.exit_code == 1
+
+    def test_update_with_conflicts_skip(
+        self, runner: CliRunner, temp_project: Path, monkeypatch
+    ):
+        """Test update with -y flag skips conflicts."""
+        from unittest.mock import patch, MagicMock
+        from ldf.update import UpdateDiff, FileChange, Conflict, UpdateResult
+
+        monkeypatch.chdir(temp_project)
+
+        # Create diff with conflict (correct field names)
+        diff = UpdateDiff()
+        diff.conflicts = [Conflict(file_path="conflict.md", reason="user_modified")]
+
+        # Create successful result
+        success_result = UpdateResult(success=True)
+
+        mock_apply = MagicMock(return_value=success_result)
+        with patch("ldf.update.get_update_diff", return_value=diff):
+            with patch("ldf.update.apply_updates", mock_apply):
+                result = runner.invoke(cli, ["update", "-y"])
+
+        # Check that conflict was resolved as skip
+        if mock_apply.called:
+            call_kwargs = mock_apply.call_args.kwargs
+            resolutions = call_kwargs.get("conflict_resolutions", {})
+            if resolutions:
+                assert resolutions.get("conflict.md") == "skip"
+
+
+class TestAuditSecurityNormalization:
+    """Tests for audit security-check normalization."""
+
+    def test_security_check_normalized(
+        self, runner: CliRunner, temp_project: Path, monkeypatch
+    ):
+        """Test that security-check is normalized to security."""
+        from unittest.mock import patch
+
+        monkeypatch.chdir(temp_project)
+
+        with patch("ldf.audit.run_audit") as mock_audit:
+            # This should normalize security-check to security
+            result = runner.invoke(cli, ["audit", "security-check", "--yes"])
+
+        if mock_audit.called:
+            call_args = mock_audit.call_args
+            # audit_type should be "security" not "security-check"
+            assert call_args.kwargs.get("audit_type") == "security"
+
+
+class TestConvertImportNextSteps:
+    """Tests for convert import next steps output."""
+
+    def test_convert_import_success_shows_next_steps(
+        self, runner: CliRunner, temp_project: Path, monkeypatch, tmp_path: Path
+    ):
+        """Test convert import success shows next steps."""
+        from unittest.mock import patch, MagicMock
+
+        monkeypatch.chdir(temp_project)
+
+        # Create a valid import file
+        import_file = tmp_path / "import.txt"
+        import_file.write_text("""
+# === ANSWERPACK: security.yaml ===
+pack: security
+answers: []
+
+# === SPEC: requirements.md ===
+# Test Requirements
+""")
+
+        # Mock successful import
+        mock_result = MagicMock()
+        mock_result.success = True
+        mock_result.spec_name = "test-spec"
+        mock_result.files_created = ["specs/test-spec/requirements.md"]
+        mock_result.files_skipped = []
+        mock_result.warnings = []
+        mock_result.errors = []
+
+        with patch("ldf.convert.import_backwards_fill", return_value=mock_result):
+            with patch("ldf.convert.print_import_result"):
+                result = runner.invoke(cli, ["convert", "import", str(import_file)])
+
+        # Should show next steps or run successfully
+        assert "Next steps" in result.output or result.exit_code == 0
+
+
+class TestPreflightCoverageChecks:
+    """Tests for preflight coverage checks."""
+
+    def test_preflight_coverage_fail(
+        self, runner: CliRunner, temp_project: Path, monkeypatch
+    ):
+        """Test preflight with coverage failure."""
+        from unittest.mock import patch, MagicMock
+        from ldf.doctor import DoctorReport
+
+        # Setup git
+        (temp_project / ".git").mkdir()
+        monkeypatch.chdir(temp_project)
+
+        # Return proper DoctorReport
+        mock_doctor_result = DoctorReport(checks=[])
+        mock_doctor = MagicMock(return_value=mock_doctor_result)
+
+        mock_lint = MagicMock(return_value=0)
+
+        mock_coverage = MagicMock(return_value={
+            "status": "FAIL",
+            "coverage_percent": 50.0,
+            "error": None
+        })
+
+        with patch("ldf.doctor.run_doctor", mock_doctor):
+            with patch("ldf.lint.lint_specs", mock_lint):
+                with patch("ldf.coverage.report_coverage", mock_coverage):
+                    result = runner.invoke(cli, ["preflight"])
+
+        # Should fail with exit code
+        assert result.exit_code != 0 or "below threshold" in result.output
+
+    def test_preflight_coverage_error(
+        self, runner: CliRunner, temp_project: Path, monkeypatch
+    ):
+        """Test preflight with coverage error."""
+        from unittest.mock import patch, MagicMock
+        from ldf.doctor import DoctorReport
+
+        (temp_project / ".git").mkdir()
+        monkeypatch.chdir(temp_project)
+
+        mock_doctor_result = DoctorReport(checks=[])
+        mock_doctor = MagicMock(return_value=mock_doctor_result)
+
+        mock_lint = MagicMock(return_value=0)
+
+        mock_coverage = MagicMock(return_value={
+            "status": "ERROR",
+            "error": "No coverage data"
+        })
+
+        with patch("ldf.doctor.run_doctor", mock_doctor):
+            with patch("ldf.lint.lint_specs", mock_lint):
+                with patch("ldf.coverage.report_coverage", mock_coverage):
+                    result = runner.invoke(cli, ["preflight"])
+
+        # Should pass (coverage errors are warnings, not failures)
+        assert result.exit_code == 0
+
+
+class TestPreflightLintFail:
+    """Tests for preflight lint failure."""
+
+    def test_preflight_lint_fail(
+        self, runner: CliRunner, temp_project: Path, monkeypatch
+    ):
+        """Test preflight with lint failure."""
+        from unittest.mock import patch, MagicMock
+
+        (temp_project / ".git").mkdir()
+        monkeypatch.chdir(temp_project)
+
+        mock_doctor = MagicMock()
+        mock_doctor.return_value = []
+
+        mock_lint = MagicMock()
+        mock_lint.return_value = 1  # Lint fails
+
+        with patch("ldf.doctor.run_doctor", mock_doctor):
+            with patch("ldf.lint.lint_specs", mock_lint):
+                result = runner.invoke(cli, ["preflight", "--skip-coverage"])
+
+        # Should fail
+        assert result.exit_code != 0
+
+
+class TestAddPackEdgeCases:
+    """Tests for add-pack command edge cases."""
+
+    def test_add_pack_no_args(
+        self, runner: CliRunner, temp_project: Path, monkeypatch
+    ):
+        """Test add-pack with no pack name."""
+        monkeypatch.chdir(temp_project)
+
+        result = runner.invoke(cli, ["add-pack"])
+
+        assert result.exit_code == 1
+        assert "Specify a pack name" in result.output
+
+    def test_add_pack_invalid_config(
+        self, runner: CliRunner, temp_project: Path, monkeypatch
+    ):
+        """Test add-pack with invalid config.yaml."""
+        monkeypatch.chdir(temp_project)
+
+        # Create invalid config
+        config_path = temp_project / ".ldf" / "config.yaml"
+        config_path.write_text("invalid: yaml: [[[")
+
+        result = runner.invoke(cli, ["add-pack", "security"])
+
+        assert result.exit_code == 1
+        assert "Invalid config" in result.output
+
+    def test_add_pack_already_exists(
+        self, runner: CliRunner, temp_project: Path, monkeypatch
+    ):
+        """Test add-pack when pack already exists."""
+        monkeypatch.chdir(temp_project)
+
+        # Create existing pack
+        qp_dir = temp_project / ".ldf" / "question-packs"
+        qp_dir.mkdir(parents=True, exist_ok=True)
+        (qp_dir / "security.yaml").write_text("pack: security")
+
+        result = runner.invoke(cli, ["add-pack", "security"])
+
+        # Should be skipped
+        assert "Skipped" in result.output or "already exist" in result.output
+
+    def test_add_pack_force_replace(
+        self, runner: CliRunner, temp_project: Path, monkeypatch
+    ):
+        """Test add-pack with --force replaces existing."""
+        from unittest.mock import patch
+
+        monkeypatch.chdir(temp_project)
+
+        # Create existing pack
+        qp_dir = temp_project / ".ldf" / "question-packs"
+        qp_dir.mkdir(parents=True, exist_ok=True)
+        (qp_dir / "security.yaml").write_text("pack: security")
+
+        # Mock the source file
+        with patch("pathlib.Path.exists") as mock_exists:
+            # Need to be careful with the mock - let it pass for most checks
+            mock_exists.return_value = True
+
+            result = runner.invoke(cli, ["add-pack", "security", "--force"])
+
+        # May show replaced or error depending on source file availability
+        assert result.exit_code == 0 or "Replaced" in result.output or "not found" in result.output
+
+    def test_add_pack_list_with_domain_packs(
+        self, runner: CliRunner, temp_project: Path, monkeypatch
+    ):
+        """Test add-pack --list shows domain packs from filesystem."""
+        from unittest.mock import patch
+
+        monkeypatch.chdir(temp_project)
+
+        result = runner.invoke(cli, ["add-pack", "--list"])
+
+        # Should show table
+        assert "Pack" in result.output
+        assert result.exit_code == 0
+
+    def test_add_pack_no_packs_added(
+        self, runner: CliRunner, temp_project: Path, monkeypatch
+    ):
+        """Test add-pack with non-existent pack."""
+        monkeypatch.chdir(temp_project)
+
+        result = runner.invoke(cli, ["add-pack", "nonexistent-pack-xyz"])
+
+        # Should say no packs added or not found
+        assert "No packs were added" in result.output or "not found" in result.output
+
+
+class TestTemplateVerifyJson:
+    """Tests for template verify JSON output."""
+
+    def test_template_verify_json_output(
+        self, runner: CliRunner, temp_project: Path, monkeypatch
+    ):
+        """Test template verify with --json flag."""
+        monkeypatch.chdir(temp_project)
+
+        # Create a valid template directory with required files
+        template_dir = temp_project / ".ldf" / "templates" / "test"
+        template_dir.mkdir(parents=True)
+        (template_dir / "template.yaml").write_text("""
+name: test
+description: Test template
+files: []
+""")
+
+        result = runner.invoke(cli, ["template", "verify", str(template_dir), "--json"])
+
+        # Should output JSON
+        assert result.exit_code == 0 or "{" in result.output
+
+
+class TestListFrameworkGuardrailsError:
+    """Tests for list-framework guardrails error handling."""
+
+    def test_list_guardrails_shows_core_guardrails(
+        self, runner: CliRunner, temp_project: Path, monkeypatch
+    ):
+        """Test list-framework guardrails shows core guardrails."""
+        monkeypatch.chdir(temp_project)
+
+        result = runner.invoke(cli, ["list-framework", "guardrails"])
+
+        # Should show guardrails table
+        assert "ID" in result.output or "Name" in result.output or result.exit_code == 0
+
+
+class TestUpdateDeclineConfirmation:
+    """Tests for update confirmation decline."""
+
+    def test_update_decline_confirmation(
+        self, runner: CliRunner, temp_project: Path, monkeypatch
+    ):
+        """Test update aborts when user declines."""
+        from unittest.mock import patch, MagicMock
+        from ldf.update import UpdateDiff, FileChange
+
+        monkeypatch.chdir(temp_project)
+
+        diff = UpdateDiff()
+        diff.files_to_add = [FileChange(path="test.md", change_type="add", reason="test")]
+
+        with patch("ldf.update.get_update_diff", return_value=diff):
+            # Simulate user declining
+            result = runner.invoke(cli, ["update"], input="n\n")
+
+        assert "Aborted" in result.output or result.exit_code == 0

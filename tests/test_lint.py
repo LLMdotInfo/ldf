@@ -1,8 +1,32 @@
 """Tests for ldf.lint module."""
 
+import json
 from pathlib import Path
 
-from ldf.lint import lint_specs
+import yaml
+
+from ldf.lint import (
+    LintReport,
+    LintResult,
+    _check_answerpacks,
+    _check_answerpacks_with_report,
+    _check_design,
+    _check_design_with_report,
+    _check_requirements,
+    _check_requirements_with_report,
+    _check_tasks,
+    _check_tasks_with_report,
+    _generate_sarif,
+    _lint_spec,
+    _lint_spec_with_report,
+    _output_sarif,
+    _print_ci_summary,
+    _print_summary,
+    _validate_guardrail_matrix,
+    _validate_guardrail_matrix_with_report,
+    lint_specs,
+)
+from ldf.utils.guardrail_loader import Guardrail
 
 
 class TestLintSpecs:
@@ -724,3 +748,707 @@ class TestLintReport:
 
         assert report.error_count == 0
         assert report.warning_count == 0
+
+
+class TestInternalLintSpec:
+    """Tests for the internal _lint_spec function."""
+
+    def test_lint_spec_ci_mode_output(self, temp_spec: Path, capsys):
+        """Test _lint_spec in CI mode outputs correctly."""
+        guardrails = [Guardrail(id=1, name="Testing Coverage", description="Test coverage", severity="error")]
+
+        errors, warnings = _lint_spec(temp_spec, guardrails, fix=False, strict_mode=False, ci_mode=True)
+
+        captured = capsys.readouterr()
+        # Should have CI-style output
+        assert "✅ Pass:" in captured.out or "✗ Error:" in captured.out or "⚠ Warning:" in captured.out
+
+    def test_lint_spec_fix_mode(self, temp_project: Path, capsys):
+        """Test _lint_spec fix mode creates missing files."""
+        spec_dir = temp_project / ".ldf" / "specs" / "fix-test"
+        spec_dir.mkdir(parents=True)
+        (spec_dir / "requirements.md").write_text("# Requirements\n")
+
+        guardrails = []
+        errors_before, _ = _lint_spec(spec_dir, guardrails, fix=False, strict_mode=False)
+        assert len(errors_before) > 0  # Missing design.md and tasks.md
+
+        # Run with fix=True
+        _lint_spec(spec_dir, guardrails, fix=True, strict_mode=False)
+
+        # Files should now exist
+        assert (spec_dir / "design.md").exists()
+        assert (spec_dir / "tasks.md").exists()
+
+    def test_lint_spec_strict_mode(self, temp_spec: Path):
+        """Test _lint_spec strict mode converts warnings to errors."""
+        guardrails = [Guardrail(id=1, name="Testing Coverage", description="Test coverage", severity="error")]
+
+        # Create spec with warnings (no user stories)
+        (temp_spec / "requirements.md").write_text("""# Requirements
+
+## Question-Pack Answers
+
+Answers.
+
+## Guardrail Coverage Matrix
+
+| Guardrail | Requirements | Design | Tasks/Tests | Owner | Status |
+|-----------|--------------|--------|-------------|-------|--------|
+| 1. Testing | [US-1] | [S1] | [T-1] | Dev | TODO |
+""")
+
+        errors, warnings = _lint_spec(temp_spec, guardrails, fix=False, strict_mode=True, ci_mode=False)
+
+        # In strict mode, warnings become errors
+        assert len(warnings) == 0  # Warnings converted to errors
+
+    def test_lint_spec_fix_cleans_whitespace(self, temp_project: Path, capsys):
+        """Test _lint_spec fix mode cleans trailing whitespace."""
+        spec_dir = temp_project / ".ldf" / "specs" / "whitespace"
+        spec_dir.mkdir(parents=True)
+        (spec_dir / "requirements.md").write_text("# Requirements   \n\nTest   \n")
+        (spec_dir / "design.md").write_text("# Design   \n")
+        (spec_dir / "tasks.md").write_text("# Tasks   \n")
+
+        guardrails = []
+        _lint_spec(spec_dir, guardrails, fix=True, strict_mode=False)
+
+        # Check whitespace was cleaned
+        content = (spec_dir / "requirements.md").read_text()
+        assert not any(line.endswith(' ') for line in content.split('\n'))
+
+
+class TestCheckRequirements:
+    """Tests for _check_requirements function."""
+
+    def test_detects_missing_sections(self, tmp_path: Path):
+        """Test detection of missing required sections."""
+        req_file = tmp_path / "requirements.md"
+        req_file.write_text("# Requirements\n\nSome content.")
+
+        errors, warnings = _check_requirements(req_file, [])
+
+        assert any("Question-Pack Answers" in e for e in errors)
+        assert any("Guardrail Coverage Matrix" in e for e in errors)
+
+    def test_detects_missing_user_stories(self, tmp_path: Path):
+        """Test detection of missing user stories."""
+        req_file = tmp_path / "requirements.md"
+        req_file.write_text("""# Requirements
+
+## Question-Pack Answers
+
+Answers here.
+
+## Guardrail Coverage Matrix
+
+| Guardrail | Requirements | Design | Tasks/Tests | Owner | Status |
+|-----------|--------------|--------|-------------|-------|--------|
+| 1. Testing | [US-1] | [S1] | [T-1] | Dev | TODO |
+""")
+
+        errors, warnings = _check_requirements(req_file, [])
+
+        assert any("user stories" in w.lower() for w in warnings)
+
+
+class TestCheckDesign:
+    """Tests for _check_design function."""
+
+    def test_warns_on_missing_guardrail_mapping(self, tmp_path: Path):
+        """Test warning for missing Guardrail Mapping section."""
+        design_file = tmp_path / "design.md"
+        design_file.write_text("# Design\n\n## Architecture\n\nContent.")
+
+        errors, warnings = _check_design(design_file, [])
+
+        assert any("Guardrail Mapping" in w for w in warnings)
+
+    def test_warns_on_missing_architecture(self, tmp_path: Path):
+        """Test warning for missing Architecture section."""
+        design_file = tmp_path / "design.md"
+        design_file.write_text("# Design\n\n## Guardrail Mapping\n\nContent.")
+
+        errors, warnings = _check_design(design_file, [])
+
+        assert any("Architecture" in w or "Components" in w for w in warnings)
+
+    def test_warns_on_missing_api_or_data(self, tmp_path: Path):
+        """Test warning for missing API or Data section."""
+        design_file = tmp_path / "design.md"
+        design_file.write_text("# Design\n\n## Architecture\n\nContent.")
+
+        errors, warnings = _check_design(design_file, [])
+
+        assert any("API" in w or "Data" in w for w in warnings)
+
+    def test_accepts_valid_design(self, tmp_path: Path):
+        """Test that valid design passes."""
+        design_file = tmp_path / "design.md"
+        design_file.write_text("""# Design
+
+## Architecture
+
+Architecture here.
+
+## Guardrail Mapping
+
+Mapping here.
+
+## API Endpoints
+
+Endpoints here.
+""")
+
+        errors, warnings = _check_design(design_file, [])
+
+        # Should have no errors and only minor warnings if any
+        assert len(errors) == 0
+
+
+class TestCheckTasks:
+    """Tests for _check_tasks function."""
+
+    def test_detects_missing_per_task_checklist(self, tmp_path: Path):
+        """Test detection of missing Per-Task Guardrail Checklist."""
+        tasks_file = tmp_path / "tasks.md"
+        tasks_file.write_text("# Tasks\n\n### Task 1.1: Test\n- [ ] Item")
+
+        errors, warnings = _check_tasks(tasks_file, [])
+
+        assert any("Per-Task Guardrail Checklist" in e for e in errors)
+
+    def test_detects_no_tasks(self, tmp_path: Path):
+        """Test detection of no tasks in file."""
+        tasks_file = tmp_path / "tasks.md"
+        tasks_file.write_text("# Tasks\n\n## Per-Task Guardrail Checklist\n\nNo tasks yet.")
+
+        errors, warnings = _check_tasks(tasks_file, [])
+
+        assert any("No tasks found" in w for w in warnings)
+
+    def test_detects_task_without_checklist(self, tmp_path: Path):
+        """Test detection of tasks without checklist items."""
+        tasks_file = tmp_path / "tasks.md"
+        tasks_file.write_text("""# Tasks
+
+## Per-Task Guardrail Checklist
+
+Template here.
+
+### Task 1.1: Test Task
+
+Description without checklist items.
+
+### Task 1.2: Another Task
+- [ ] This one has checklist
+""")
+
+        errors, warnings = _check_tasks(tasks_file, [])
+
+        assert any("Task 1.1" in w and "no checklist" in w for w in warnings)
+
+
+class TestCheckAnswerpacks:
+    """Tests for _check_answerpacks function."""
+
+    def test_warns_on_missing_answerpacks_dir(self, temp_project: Path):
+        """Test warning when answerpacks directory is missing."""
+        spec_dir = temp_project / ".ldf" / "specs" / "no-answers"
+        spec_dir.mkdir(parents=True)
+
+        errors, warnings = _check_answerpacks(spec_dir)
+
+        assert any("No answerpacks found" in w for w in warnings)
+
+    def test_warns_on_empty_answerpacks_dir(self, temp_project: Path):
+        """Test warning when answerpacks directory is empty."""
+        spec_dir = temp_project / ".ldf" / "specs" / "empty-answers"
+        spec_dir.mkdir(parents=True)
+        answerpacks_dir = temp_project / ".ldf" / "answerpacks" / "empty-answers"
+        answerpacks_dir.mkdir(parents=True)
+
+        errors, warnings = _check_answerpacks(spec_dir)
+
+        assert any("no YAML files" in w for w in warnings)
+
+    def test_detects_unfilled_template_markers(self, temp_project: Path):
+        """Test detection of unfilled template markers in answerpacks."""
+        spec_dir = temp_project / ".ldf" / "specs" / "unfilled"
+        spec_dir.mkdir(parents=True)
+        answerpacks_dir = temp_project / ".ldf" / "answerpacks" / "unfilled"
+        answerpacks_dir.mkdir(parents=True)
+        (answerpacks_dir / "security.yaml").write_text("answer: [TODO: Fill this out]")
+
+        errors, warnings = _check_answerpacks(spec_dir)
+
+        assert any("unfilled template markers" in e for e in errors)
+
+    def test_detects_placeholder_marker(self, temp_project: Path):
+        """Test detection of PLACEHOLDER marker in answerpacks."""
+        spec_dir = temp_project / ".ldf" / "specs" / "placeholder"
+        spec_dir.mkdir(parents=True)
+        answerpacks_dir = temp_project / ".ldf" / "answerpacks" / "placeholder"
+        answerpacks_dir.mkdir(parents=True)
+        (answerpacks_dir / "test.yaml").write_text("answer: [PLACEHOLDER]")
+
+        errors, warnings = _check_answerpacks(spec_dir)
+
+        assert any("unfilled template markers" in e for e in errors)
+
+    def test_detects_your_underscore_marker(self, temp_project: Path):
+        """Test detection of YOUR_ marker in answerpacks."""
+        spec_dir = temp_project / ".ldf" / "specs" / "your-marker"
+        spec_dir.mkdir(parents=True)
+        answerpacks_dir = temp_project / ".ldf" / "answerpacks" / "your-marker"
+        answerpacks_dir.mkdir(parents=True)
+        (answerpacks_dir / "test.yaml").write_text("api_key: YOUR_API_KEY_HERE")
+
+        errors, warnings = _check_answerpacks(spec_dir)
+
+        assert any("unfilled template markers" in e for e in errors)
+
+    def test_accepts_valid_answerpacks(self, temp_project: Path):
+        """Test that valid answerpacks pass."""
+        spec_dir = temp_project / ".ldf" / "specs" / "valid-answers"
+        spec_dir.mkdir(parents=True)
+        answerpacks_dir = temp_project / ".ldf" / "answerpacks" / "valid-answers"
+        answerpacks_dir.mkdir(parents=True)
+        (answerpacks_dir / "security.yaml").write_text("authentication: JWT tokens\nauthorization: RBAC")
+
+        errors, warnings = _check_answerpacks(spec_dir)
+
+        assert len(errors) == 0
+
+
+class TestValidateGuardrailMatrix:
+    """Tests for _validate_guardrail_matrix function."""
+
+    def test_empty_matrix_error(self):
+        """Test that empty matrix produces error."""
+        content = """## Guardrail Coverage Matrix
+
+| Guardrail | Requirements | Design | Tasks/Tests | Owner | Status |
+|-----------|--------------|--------|-------------|-------|--------|
+
+No data rows.
+"""
+        guardrails = [Guardrail(id=1, name="Testing Coverage", description="Test coverage", severity="error")]
+
+        errors, warnings = _validate_guardrail_matrix(content, guardrails)
+
+        assert any("empty" in e.lower() for e in errors)
+
+    def test_missing_guardrail_error(self):
+        """Test that missing guardrail produces error."""
+        content = """## Guardrail Coverage Matrix
+
+| Guardrail | Requirements | Design | Tasks/Tests | Owner | Status |
+|-----------|--------------|--------|-------------|-------|--------|
+| 1. Testing | [US-1] | [S1] | [T-1] | Dev | TODO |
+"""
+        guardrails = [
+            Guardrail(id=1, name="Testing Coverage", description="Test coverage", severity="error"),
+            Guardrail(id=2, name="Security Basics", description="Security basics", severity="error"),
+        ]
+
+        errors, warnings = _validate_guardrail_matrix(content, guardrails)
+
+        assert any("#2" in e or "Security" in e for e in errors)
+
+    def test_missing_requirements_ref_warning(self):
+        """Test warning for missing requirements reference."""
+        content = """## Guardrail Coverage Matrix
+
+| Guardrail | Requirements | Design | Tasks/Tests | Owner | Status |
+|-----------|--------------|--------|-------------|-------|--------|
+| 1. Testing | | [S1] | [T-1] | Dev | TODO |
+"""
+        guardrails = [Guardrail(id=1, name="Testing Coverage", description="Test coverage", severity="error")]
+
+        errors, warnings = _validate_guardrail_matrix(content, guardrails)
+
+        assert any("Missing requirements reference" in w for w in warnings)
+
+    def test_missing_design_ref_warning(self):
+        """Test warning for missing design reference."""
+        content = """## Guardrail Coverage Matrix
+
+| Guardrail | Requirements | Design | Tasks/Tests | Owner | Status |
+|-----------|--------------|--------|-------------|-------|--------|
+| 1. Testing | [US-1] | | [T-1] | Dev | TODO |
+"""
+        guardrails = [Guardrail(id=1, name="Testing Coverage", description="Test coverage", severity="error")]
+
+        errors, warnings = _validate_guardrail_matrix(content, guardrails)
+
+        assert any("Missing design reference" in w for w in warnings)
+
+    def test_na_without_justification_warning(self):
+        """Test warning for N/A without justification."""
+        content = """## Guardrail Coverage Matrix
+
+| Guardrail | Requirements | Design | Tasks/Tests | Owner | Status |
+|-----------|--------------|--------|-------------|-------|--------|
+| 1. Testing | | | | | N/A |
+"""
+        guardrails = [Guardrail(id=1, name="Testing Coverage", description="Test coverage", severity="error")]
+
+        errors, warnings = _validate_guardrail_matrix(content, guardrails)
+
+        assert any("justification" in w for w in warnings)
+
+    def test_missing_owner_warning(self):
+        """Test warning for missing owner."""
+        content = """## Guardrail Coverage Matrix
+
+| Guardrail | Requirements | Design | Tasks/Tests | Owner | Status |
+|-----------|--------------|--------|-------------|-------|--------|
+| 1. Testing | [US-1] | [S1] | [T-1] | | TODO |
+"""
+        guardrails = [Guardrail(id=1, name="Testing Coverage", description="Test coverage", severity="error")]
+
+        errors, warnings = _validate_guardrail_matrix(content, guardrails)
+
+        assert any("Missing owner" in w for w in warnings)
+
+    def test_na_with_justification_ok(self):
+        """Test that N/A with justification is OK."""
+        content = """## Guardrail Coverage Matrix
+
+| Guardrail | Requirements | Design | Tasks/Tests | Owner | Status |
+|-----------|--------------|--------|-------------|-------|--------|
+| 1. Testing | | | | | N/A - No testing needed |
+"""
+        guardrails = [Guardrail(id=1, name="Testing Coverage", description="Test coverage", severity="error")]
+
+        errors, warnings = _validate_guardrail_matrix(content, guardrails)
+
+        # No justification warning for N/A with dash
+        assert not any("justification" in w for w in warnings)
+
+
+class TestPrintSummary:
+    """Tests for _print_summary function."""
+
+    def test_print_summary_all_passed(self, capsys):
+        """Test summary output when all specs pass."""
+        results = [
+            ("spec-a", [], []),
+            ("spec-b", [], []),
+        ]
+
+        _print_summary(results, total_errors=0, total_warnings=0)
+
+        captured = capsys.readouterr()
+        assert "All specs passed" in captured.out
+
+    def test_print_summary_with_errors(self, capsys):
+        """Test summary output with errors."""
+        results = [
+            ("spec-a", ["Error 1", "Error 2"], []),
+        ]
+
+        _print_summary(results, total_errors=2, total_warnings=0)
+
+        captured = capsys.readouterr()
+        assert "Total errors: 2" in captured.out
+
+    def test_print_summary_with_warnings(self, capsys):
+        """Test summary output with warnings."""
+        results = [
+            ("spec-a", [], ["Warning 1"]),
+        ]
+
+        _print_summary(results, total_errors=0, total_warnings=1)
+
+        captured = capsys.readouterr()
+        assert "Total warnings: 1" in captured.out
+
+    def test_print_summary_with_both(self, capsys):
+        """Test summary output with both errors and warnings."""
+        results = [
+            ("spec-a", ["Error"], ["Warning"]),
+        ]
+
+        _print_summary(results, total_errors=1, total_warnings=1)
+
+        captured = capsys.readouterr()
+        assert "Total errors: 1" in captured.out
+        assert "Total warnings: 1" in captured.out
+
+
+class TestPrintCiSummary:
+    """Tests for _print_ci_summary function."""
+
+    def test_ci_summary_all_passed(self, capsys):
+        """Test CI summary output when all specs pass."""
+        results = [
+            ("spec-a", [], []),
+        ]
+
+        _print_ci_summary(results, total_errors=0, total_warnings=0)
+
+        captured = capsys.readouterr()
+        assert "All specs passed" in captured.out
+        assert "✅" in captured.out
+
+    def test_ci_summary_with_errors(self, capsys):
+        """Test CI summary output with errors."""
+        results = [
+            ("spec-a", ["Error 1"], []),
+        ]
+
+        _print_ci_summary(results, total_errors=1, total_warnings=0)
+
+        captured = capsys.readouterr()
+        assert "❌" in captured.out
+        assert "1 error" in captured.out
+
+    def test_ci_summary_with_warnings_only(self, capsys):
+        """Test CI summary output with warnings only."""
+        results = [
+            ("spec-a", [], ["Warning 1"]),
+        ]
+
+        _print_ci_summary(results, total_errors=0, total_warnings=1)
+
+        captured = capsys.readouterr()
+        assert "⚠️" in captured.out
+        assert "1 warning" in captured.out
+
+
+class TestGenerateSarif:
+    """Tests for _generate_sarif function."""
+
+    def test_sarif_with_init_error(self, tmp_path: Path):
+        """Test SARIF generation with init error."""
+        report = LintReport()
+
+        sarif = _generate_sarif(report, tmp_path, init_error="Project not initialized")
+
+        assert len(sarif["runs"][0]["results"]) > 0
+        assert "Project not initialized" in sarif["runs"][0]["results"][0]["message"]["text"]
+
+    def test_sarif_includes_location_with_line(self, tmp_path: Path):
+        """Test SARIF includes location with line number."""
+        report = LintReport()
+        report.results.append(LintResult(
+            rule_id="ldf/missing-section",
+            level="error",
+            message="Missing section",
+            spec_name="test-spec",
+            file_name="requirements.md",
+            line=10,
+        ))
+
+        sarif = _generate_sarif(report, tmp_path)
+
+        result = sarif["runs"][0]["results"][0]
+        assert "locations" in result
+        assert result["locations"][0]["physicalLocation"]["region"]["startLine"] == 10
+
+    def test_sarif_only_includes_used_rules(self, tmp_path: Path):
+        """Test SARIF only includes rules that are used."""
+        report = LintReport()
+        report.results.append(LintResult(
+            rule_id="ldf/missing-file",
+            level="error",
+            message="Missing file",
+            spec_name="test-spec",
+            file_name="design.md",
+        ))
+
+        sarif = _generate_sarif(report, tmp_path)
+
+        rules = sarif["runs"][0]["tool"]["driver"]["rules"]
+        rule_ids = [r["id"] for r in rules]
+        assert "ldf/missing-file" in rule_ids
+        # Unused rules should not be present
+        assert len(rules) == 1
+
+
+class TestOutputSarif:
+    """Tests for _output_sarif function."""
+
+    def test_output_sarif_to_file(self, tmp_path: Path):
+        """Test SARIF output to file."""
+        sarif = {"version": "2.1.0", "runs": []}
+        output_file = tmp_path / "output.sarif"
+
+        _output_sarif(sarif, str(output_file))
+
+        assert output_file.exists()
+        content = json.loads(output_file.read_text())
+        assert content["version"] == "2.1.0"
+
+    def test_output_sarif_to_stdout(self, capsys):
+        """Test SARIF output to stdout."""
+        sarif = {"version": "2.1.0", "runs": []}
+
+        _output_sarif(sarif, None)
+
+        captured = capsys.readouterr()
+        content = json.loads(captured.out)
+        assert content["version"] == "2.1.0"
+
+
+class TestWithReportFunctions:
+    """Tests for _*_with_report functions."""
+
+    def test_check_requirements_with_report(self, tmp_path: Path):
+        """Test _check_requirements_with_report returns LintResults."""
+        req_file = tmp_path / "requirements.md"
+        req_file.write_text("# Requirements\n")
+
+        errors, warnings, results = _check_requirements_with_report(req_file, [], "test-spec")
+
+        assert len(results) > 0
+        assert all(isinstance(r, LintResult) for r in results)
+
+    def test_check_design_with_report(self, tmp_path: Path):
+        """Test _check_design_with_report returns LintResults."""
+        design_file = tmp_path / "design.md"
+        design_file.write_text("# Design\n")
+
+        errors, warnings, results = _check_design_with_report(design_file, [], "test-spec")
+
+        assert len(results) > 0
+        assert all(isinstance(r, LintResult) for r in results)
+
+    def test_check_tasks_with_report(self, tmp_path: Path):
+        """Test _check_tasks_with_report returns LintResults."""
+        tasks_file = tmp_path / "tasks.md"
+        tasks_file.write_text("# Tasks\n")
+
+        errors, warnings, results = _check_tasks_with_report(tasks_file, [], "test-spec")
+
+        assert len(results) > 0
+        assert all(isinstance(r, LintResult) for r in results)
+
+    def test_check_answerpacks_with_report(self, temp_project: Path):
+        """Test _check_answerpacks_with_report returns LintResults."""
+        spec_dir = temp_project / ".ldf" / "specs" / "test-spec"
+        spec_dir.mkdir(parents=True)
+
+        errors, warnings, results = _check_answerpacks_with_report(spec_dir, "test-spec")
+
+        assert len(results) > 0
+        assert all(isinstance(r, LintResult) for r in results)
+
+    def test_validate_guardrail_matrix_with_report(self):
+        """Test _validate_guardrail_matrix_with_report returns LintResults."""
+        content = """## Guardrail Coverage Matrix
+
+| Guardrail | Requirements | Design | Tasks/Tests | Owner | Status |
+|-----------|--------------|--------|-------------|-------|--------|
+
+No rows.
+"""
+        guardrails = [Guardrail(id=1, name="Testing Coverage", description="Test coverage", severity="error")]
+
+        errors, warnings, results = _validate_guardrail_matrix_with_report(content, guardrails, "test-spec")
+
+        assert len(results) > 0
+        assert all(isinstance(r, LintResult) for r in results)
+
+
+class TestLintSpecWithReport:
+    """Tests for _lint_spec_with_report function."""
+
+    def test_lint_spec_with_report_returns_results(self, temp_spec: Path):
+        """Test _lint_spec_with_report returns LintResults."""
+        guardrails = [Guardrail(id=1, name="Testing Coverage", description="Test coverage", severity="error")]
+
+        errors, warnings, results = _lint_spec_with_report(
+            temp_spec, guardrails, fix=False, strict_mode=False
+        )
+
+        assert isinstance(results, list)
+
+    def test_lint_spec_with_report_sarif_mode(self, temp_spec: Path, capsys):
+        """Test _lint_spec_with_report in SARIF mode suppresses console output."""
+        guardrails = []
+
+        _lint_spec_with_report(temp_spec, guardrails, fix=False, strict_mode=False, sarif_mode=True)
+
+        captured = capsys.readouterr()
+        # SARIF mode should not print console output
+        assert "Linting:" not in captured.out
+
+    def test_lint_spec_with_report_ci_mode(self, temp_spec: Path, capsys):
+        """Test _lint_spec_with_report in CI mode."""
+        guardrails = []
+
+        _lint_spec_with_report(temp_spec, guardrails, fix=False, strict_mode=False, ci_mode=True)
+
+        captured = capsys.readouterr()
+        # CI mode should produce emoji output
+        assert "✅" in captured.out or "✗" in captured.out or "⚠" in captured.out
+
+
+class TestSarifEdgeCases:
+    """Tests for SARIF output edge cases."""
+
+    def test_sarif_non_ldf_project(self, tmp_path: Path, monkeypatch, capsys):
+        """Test SARIF output for non-LDF project."""
+        monkeypatch.chdir(tmp_path)
+
+        lint_specs(spec_name=None, lint_all=True, fix=False, output_format="sarif")
+
+        captured = capsys.readouterr()
+        sarif = json.loads(captured.out)
+        # Should have error about missing .ldf
+        assert len(sarif["runs"][0]["results"]) > 0
+
+    def test_sarif_no_specs_dir(self, temp_project: Path, monkeypatch, capsys):
+        """Test SARIF output when specs directory missing."""
+        import shutil
+        specs_dir = temp_project / ".ldf" / "specs"
+        if specs_dir.exists():
+            shutil.rmtree(specs_dir)
+        monkeypatch.chdir(temp_project)
+
+        lint_specs(spec_name=None, lint_all=True, fix=False, output_format="sarif")
+
+        captured = capsys.readouterr()
+        sarif = json.loads(captured.out)
+        # Should have valid empty SARIF
+        assert sarif["version"] == "2.1.0"
+
+    def test_sarif_spec_not_found(self, temp_project: Path, monkeypatch, capsys):
+        """Test SARIF output when spec not found."""
+        monkeypatch.chdir(temp_project)
+
+        lint_specs(spec_name="nonexistent", lint_all=False, fix=False, output_format="sarif")
+
+        captured = capsys.readouterr()
+        sarif = json.loads(captured.out)
+        assert len(sarif["runs"][0]["results"]) > 0
+
+    def test_sarif_no_spec_or_all(self, temp_project: Path, monkeypatch, capsys):
+        """Test SARIF output when neither spec nor --all specified."""
+        monkeypatch.chdir(temp_project)
+
+        lint_specs(spec_name=None, lint_all=False, fix=False, output_format="sarif")
+
+        captured = capsys.readouterr()
+        sarif = json.loads(captured.out)
+        assert len(sarif["runs"][0]["results"]) > 0
+
+    def test_sarif_empty_specs_dir(self, temp_project: Path, monkeypatch, capsys):
+        """Test SARIF output when specs directory is empty."""
+        specs_dir = temp_project / ".ldf" / "specs"
+        specs_dir.mkdir(exist_ok=True)
+        for d in specs_dir.iterdir():
+            if d.is_dir():
+                import shutil
+                shutil.rmtree(d)
+        monkeypatch.chdir(temp_project)
+
+        lint_specs(spec_name=None, lint_all=True, fix=False, output_format="sarif")
+
+        captured = capsys.readouterr()
+        sarif = json.loads(captured.out)
+        assert sarif["version"] == "2.1.0"

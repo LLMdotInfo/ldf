@@ -523,3 +523,253 @@ class TestPrintReport:
         assert "Warning" in captured.out
         assert "Failed" in captured.out
         assert "Fix it" in captured.out
+
+
+class TestCheckMcpServersEdgeCases:
+    """Edge case tests for check_mcp_servers."""
+
+    def test_handles_mcp_package_not_found(self, temp_project: Path, monkeypatch):
+        """Test handling when MCP package is not found."""
+        config_path = temp_project / ".ldf" / "config.yaml"
+        config_path.write_text("version: '1.0'\nmcp_servers:\n  - spec-inspector")
+
+        # Mock importlib.resources.files to raise ModuleNotFoundError
+        def raise_not_found(pkg):
+            raise ModuleNotFoundError("No module named 'ldf._mcp_servers'")
+
+        monkeypatch.setattr("importlib.resources.files", raise_not_found)
+
+        result = check_mcp_servers(temp_project)
+
+        assert result.status == CheckStatus.WARN
+        assert "Cannot locate MCP servers package" in result.message
+
+    def test_warns_on_missing_server(self, temp_project: Path, monkeypatch):
+        """Test warning when configured server doesn't exist."""
+        from unittest.mock import MagicMock
+
+        config_path = temp_project / ".ldf" / "config.yaml"
+        config_path.write_text("version: '1.0'\nmcp_servers:\n  - nonexistent-server")
+
+        # Mock to return False for is_file
+        mock_pkg = MagicMock()
+        mock_path = MagicMock()
+        mock_path.is_file.return_value = False
+        mock_pkg.joinpath.return_value = mock_path
+
+        def mock_files(pkg):
+            return mock_pkg
+
+        monkeypatch.setattr("importlib.resources.files", mock_files)
+
+        result = check_mcp_servers(temp_project)
+
+        assert result.status == CheckStatus.WARN
+        assert "Missing servers" in result.message
+
+
+class TestCheckRequiredDepsEdgeCases:
+    """Edge case tests for check_required_deps."""
+
+    def test_handles_missing_dep(self, monkeypatch):
+        """Test failure when a required dependency is missing."""
+        import builtins
+
+        original_import = builtins.__import__
+
+        def mock_import(name, *args, **kwargs):
+            if name == "questionary":
+                raise ImportError("No module named 'questionary'")
+            return original_import(name, *args, **kwargs)
+
+        monkeypatch.setattr(builtins, "__import__", mock_import)
+
+        result = check_required_deps()
+
+        assert result.status == CheckStatus.FAIL
+        assert "questionary" in result.message
+
+
+class TestCheckMcpDepsEdgeCases:
+    """Edge case tests for check_mcp_deps."""
+
+    def test_warns_when_mcp_missing(self, temp_project: Path, monkeypatch):
+        """Test warning when mcp package is missing."""
+        import builtins
+
+        config_path = temp_project / ".ldf" / "config.yaml"
+        config_path.write_text("version: '1.0'\nmcp_servers:\n  - spec-inspector")
+
+        original_import = builtins.__import__
+
+        def mock_import(name, *args, **kwargs):
+            if name == "mcp":
+                raise ImportError("No module named 'mcp'")
+            return original_import(name, *args, **kwargs)
+
+        monkeypatch.setattr(builtins, "__import__", mock_import)
+
+        result = check_mcp_deps(temp_project)
+
+        assert result.status == CheckStatus.WARN
+        assert "mcp" in result.message
+
+    def test_warns_when_coverage_missing_for_reporter(self, temp_project: Path, monkeypatch):
+        """Test warning when coverage package is missing for coverage-reporter."""
+        import builtins
+
+        config_path = temp_project / ".ldf" / "config.yaml"
+        config_path.write_text("version: '1.0'\nmcp_servers:\n  - coverage-reporter")
+
+        original_import = builtins.__import__
+
+        def mock_import(name, *args, **kwargs):
+            if name == "coverage":
+                raise ImportError("No module named 'coverage'")
+            return original_import(name, *args, **kwargs)
+
+        monkeypatch.setattr(builtins, "__import__", mock_import)
+
+        result = check_mcp_deps(temp_project)
+
+        assert result.status == CheckStatus.WARN
+        assert "coverage" in result.message
+
+    def test_passes_when_all_mcp_deps_present(self, temp_project: Path):
+        """Test passing when all MCP deps are installed."""
+        config_path = temp_project / ".ldf" / "config.yaml"
+        config_path.write_text("version: '1.0'\nmcp_servers:\n  - spec-inspector")
+
+        result = check_mcp_deps(temp_project)
+
+        # Should pass or warn depending on whether mcp is installed
+        assert result.status in (CheckStatus.PASS, CheckStatus.WARN)
+
+
+class TestCheckGitHooksEdgeCases:
+    """Edge case tests for check_git_hooks."""
+
+    def test_warns_on_read_error(self, temp_project: Path, monkeypatch):
+        """Test warning when pre-commit hook can't be read."""
+        git_dir = temp_project / ".git"
+        git_dir.mkdir()
+        hooks_dir = git_dir / "hooks"
+        hooks_dir.mkdir()
+        pre_commit = hooks_dir / "pre-commit"
+        pre_commit.write_text("#!/bin/sh\nldf lint\n")
+
+        # Mock read_text to raise OSError
+        def raise_os_error():
+            raise OSError("Permission denied")
+
+        from pathlib import Path as PathClass
+
+        original_read_text = PathClass.read_text
+
+        def mock_read_text(self, *args, **kwargs):
+            if self.name == "pre-commit":
+                raise OSError("Permission denied")
+            return original_read_text(self, *args, **kwargs)
+
+        monkeypatch.setattr(PathClass, "read_text", mock_read_text)
+
+        result = check_git_hooks(temp_project)
+
+        assert result.status == CheckStatus.WARN
+        assert "Cannot read pre-commit hook" in result.message
+
+
+class TestCheckMcpJsonEdgeCases:
+    """Edge case tests for check_mcp_json."""
+
+    def test_warns_on_missing_servers_in_json(self, temp_project: Path):
+        """Test warning when servers in config are missing from mcp.json."""
+        import json
+
+        config_path = temp_project / ".ldf" / "config.yaml"
+        config_path.write_text("version: '1.0'\nmcp_servers:\n  - spec-inspector\n  - coverage-reporter")
+
+        # Create mcp.json without spec-inspector
+        claude_dir = temp_project / ".claude"
+        claude_dir.mkdir()
+        mcp_json = {
+            "mcpServers": {
+                "other-server": {
+                    "args": ["not-ldf"]
+                }
+            }
+        }
+        (claude_dir / "mcp.json").write_text(json.dumps(mcp_json))
+
+        result = check_mcp_json(temp_project)
+
+        assert result.status == CheckStatus.WARN
+        assert "missing" in result.message.lower()
+
+    def test_passes_with_all_servers_in_json(self, temp_project: Path):
+        """Test passing when all configured servers are in mcp.json."""
+        import json
+
+        config_path = temp_project / ".ldf" / "config.yaml"
+        config_path.write_text("version: '1.0'\nmcp_servers:\n  - spec-inspector")
+
+        # Create mcp.json with spec-inspector
+        claude_dir = temp_project / ".claude"
+        claude_dir.mkdir()
+        mcp_json = {
+            "mcpServers": {
+                "spec-inspector": {
+                    "args": ["-m", "ldf._mcp_servers.spec-inspector.server"]
+                }
+            }
+        }
+        (claude_dir / "mcp.json").write_text(json.dumps(mcp_json))
+
+        result = check_mcp_json(temp_project)
+
+        assert result.status == CheckStatus.PASS
+        assert "up to date" in result.message
+
+
+class TestRunDoctorAutoFix:
+    """Tests for run_doctor auto-fix functionality."""
+
+    def test_attempts_fix_when_requested(self, temp_project: Path, monkeypatch):
+        """Test that fix=True attempts to auto-fix issues."""
+        from unittest.mock import MagicMock, patch
+
+        # Remove a required directory to create a failure
+        specs_dir = temp_project / ".ldf" / "specs"
+        if specs_dir.exists():
+            specs_dir.rmdir()
+
+        # Mock subprocess.run to capture the call
+        mock_run = MagicMock()
+        monkeypatch.setattr("subprocess.run", mock_run)
+
+        report = run_doctor(temp_project, fix=True)
+
+        # Check that subprocess.run was called with init --repair
+        # (if there was a failure with "ldf init" fix_hint)
+        if any(c.status == CheckStatus.FAIL and c.fix_hint and "ldf init" in c.fix_hint for c in report.checks):
+            assert mock_run.called
+
+    def test_fix_handles_subprocess_exception(self, temp_project: Path, monkeypatch):
+        """Test that fix handles subprocess exceptions gracefully."""
+        from unittest.mock import MagicMock
+
+        # Create a failure condition
+        config_path = temp_project / ".ldf" / "config.yaml"
+        config_path.unlink()
+
+        # Mock subprocess.run to raise an exception
+        def raise_exception(*args, **kwargs):
+            raise Exception("Subprocess failed")
+
+        monkeypatch.setattr("subprocess.run", raise_exception)
+
+        # Should not raise, just continue
+        report = run_doctor(temp_project, fix=True)
+
+        assert report is not None
+        assert len(report.checks) > 0

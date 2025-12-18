@@ -2,15 +2,23 @@
 
 from pathlib import Path
 
+import pytest
+import yaml
+
 from ldf.init import (
     FRAMEWORK_DIR,
+    _copy_macros,
     _copy_question_packs,
+    _copy_templates,
+    _create_claude_commands,
     _create_claude_md,
     _create_config,
     _create_directories,
     _create_guardrails,
     _print_summary,
+    compute_file_checksum,
     initialize_project,
+    repair_project,
 )
 from ldf.utils.descriptions import (
     get_core_packs,
@@ -423,3 +431,523 @@ class TestInitializeProjectInteractive:
         assert "question_packs" in prompts_called
         assert "mcp_servers" in prompts_called
         assert "confirm" in prompts_called
+
+
+class TestComputeFileChecksum:
+    """Tests for compute_file_checksum function."""
+
+    def test_computes_checksum(self, tmp_path: Path):
+        """Test that checksum is computed correctly."""
+        test_file = tmp_path / "test.txt"
+        test_file.write_text("Hello, World!")
+
+        checksum = compute_file_checksum(test_file)
+
+        assert checksum is not None
+        assert len(checksum) == 64  # SHA256 hex digest is 64 chars
+        # Known SHA256 of "Hello, World!"
+        assert checksum == "dffd6021bb2bd5b0af676290809ec3a53191dd81c7f70a4b28688a362182986f"
+
+    def test_different_content_different_checksum(self, tmp_path: Path):
+        """Test that different content produces different checksums."""
+        file1 = tmp_path / "file1.txt"
+        file2 = tmp_path / "file2.txt"
+        file1.write_text("Content A")
+        file2.write_text("Content B")
+
+        checksum1 = compute_file_checksum(file1)
+        checksum2 = compute_file_checksum(file2)
+
+        assert checksum1 != checksum2
+
+    def test_same_content_same_checksum(self, tmp_path: Path):
+        """Test that same content produces same checksums."""
+        file1 = tmp_path / "file1.txt"
+        file2 = tmp_path / "file2.txt"
+        file1.write_text("Same content")
+        file2.write_text("Same content")
+
+        checksum1 = compute_file_checksum(file1)
+        checksum2 = compute_file_checksum(file2)
+
+        assert checksum1 == checksum2
+
+    def test_large_file_checksum(self, tmp_path: Path):
+        """Test checksum on a large file (tests chunked reading)."""
+        large_file = tmp_path / "large.txt"
+        # Create file larger than 8192 bytes (the chunk size)
+        large_file.write_text("x" * 20000)
+
+        checksum = compute_file_checksum(large_file)
+
+        assert checksum is not None
+        assert len(checksum) == 64
+
+
+class TestKeyboardInterruptHandling:
+    """Tests for KeyboardInterrupt handling in initialize_project."""
+
+    def test_keyboard_interrupt_in_prompt_project_path(self, tmp_path: Path, monkeypatch, capsys):
+        """Test KeyboardInterrupt during project path prompt."""
+        monkeypatch.chdir(tmp_path)
+
+        def mock_prompt_project_path():
+            raise KeyboardInterrupt()
+
+        monkeypatch.setattr("ldf.init.prompt_project_path", mock_prompt_project_path)
+
+        # Call without project_path to trigger prompt
+        initialize_project(
+            project_path=None,
+            preset="custom",
+            question_packs=[],
+            mcp_servers=[],
+            non_interactive=False,
+        )
+
+        captured = capsys.readouterr()
+        assert "Aborted" in captured.out
+        # Should not have created .ldf directory
+        assert not (tmp_path / ".ldf").exists()
+
+    def test_keyboard_interrupt_during_interactive_config(self, tmp_path: Path, monkeypatch, capsys):
+        """Test KeyboardInterrupt during interactive configuration."""
+        monkeypatch.chdir(tmp_path)
+
+        def mock_prompt_preset():
+            raise KeyboardInterrupt()
+
+        monkeypatch.setattr("ldf.init.prompt_preset", mock_prompt_preset)
+
+        initialize_project(
+            project_path=tmp_path,
+            preset=None,  # Will trigger preset prompt
+            question_packs=None,
+            mcp_servers=None,
+            non_interactive=False,
+        )
+
+        captured = capsys.readouterr()
+        assert "Aborted" in captured.out
+
+    def test_keyboard_interrupt_during_question_packs_prompt(self, tmp_path: Path, monkeypatch, capsys):
+        """Test KeyboardInterrupt during question packs prompt."""
+        monkeypatch.chdir(tmp_path)
+
+        monkeypatch.setattr("ldf.init.prompt_preset", lambda: "custom")
+
+        def mock_prompt_question_packs(preset):
+            raise KeyboardInterrupt()
+
+        monkeypatch.setattr("ldf.init.prompt_question_packs", mock_prompt_question_packs)
+
+        initialize_project(
+            project_path=tmp_path,
+            preset=None,
+            question_packs=None,
+            mcp_servers=None,
+            non_interactive=False,
+        )
+
+        captured = capsys.readouterr()
+        assert "Aborted" in captured.out
+
+
+class TestDefaultMcpServersFallback:
+    """Tests for default MCP servers fallback logic."""
+
+    def test_fallback_mcp_servers_when_none_default(self, tmp_path: Path, monkeypatch):
+        """Test that fallback MCP servers are used when no servers are marked default."""
+        monkeypatch.chdir(tmp_path)
+
+        # Mock get_all_mcp_servers to return servers
+        monkeypatch.setattr("ldf.init.get_all_mcp_servers", lambda: ["server1", "server2"])
+        # Mock is_mcp_server_default to return False for all
+        monkeypatch.setattr("ldf.init.is_mcp_server_default", lambda s: False)
+
+        initialize_project(
+            project_path=tmp_path,
+            preset="custom",
+            question_packs=["security"],
+            mcp_servers=None,  # Will trigger default selection
+            non_interactive=True,
+        )
+
+        config_path = tmp_path / ".ldf" / "config.yaml"
+        with open(config_path) as f:
+            config = yaml.safe_load(f)
+
+        # Should have fallback servers
+        assert "spec-inspector" in config["mcp_servers"]
+        assert "coverage-reporter" in config["mcp_servers"]
+
+
+class TestConfirmationAborted:
+    """Tests for confirmation dialog being rejected."""
+
+    def test_confirm_initialization_aborted(self, tmp_path: Path, monkeypatch, capsys):
+        """Test that rejecting confirmation aborts initialization."""
+        monkeypatch.chdir(tmp_path)
+
+        monkeypatch.setattr("ldf.init.prompt_preset", lambda: "custom")
+        monkeypatch.setattr("ldf.init.prompt_question_packs", lambda preset: ["security"])
+        monkeypatch.setattr("ldf.init.prompt_mcp_servers", lambda: ["spec-inspector"])
+        monkeypatch.setattr("ldf.init.prompt_install_hooks", lambda: False)
+        monkeypatch.setattr("ldf.init.confirm_initialization", lambda *a, **kw: False)
+
+        initialize_project(
+            project_path=tmp_path,
+            preset=None,
+            question_packs=None,
+            mcp_servers=None,
+            non_interactive=False,
+        )
+
+        captured = capsys.readouterr()
+        assert "Aborted" in captured.out
+
+
+class TestCopyTemplates:
+    """Tests for _copy_templates function."""
+
+    def test_copies_all_templates(self, tmp_path: Path):
+        """Test that all spec templates are copied."""
+        ldf_dir = tmp_path / ".ldf"
+        ldf_dir.mkdir()
+        (ldf_dir / "templates").mkdir()
+
+        _copy_templates(ldf_dir)
+
+        templates_dir = ldf_dir / "templates"
+        assert (templates_dir / "requirements.md").exists()
+        assert (templates_dir / "design.md").exists()
+        assert (templates_dir / "tasks.md").exists()
+
+    def test_handles_missing_source_templates(self, tmp_path: Path, monkeypatch):
+        """Test that missing source templates are handled gracefully."""
+        ldf_dir = tmp_path / ".ldf"
+        ldf_dir.mkdir()
+        (ldf_dir / "templates").mkdir()
+
+        # Create a temp framework dir without templates
+        fake_framework = tmp_path / "fake_framework"
+        (fake_framework / "templates").mkdir(parents=True)
+
+        monkeypatch.setattr("ldf.init.FRAMEWORK_DIR", fake_framework)
+
+        # Should not raise an error
+        _copy_templates(ldf_dir)
+
+
+class TestCopyMacros:
+    """Tests for _copy_macros function."""
+
+    def test_copies_all_macros(self, tmp_path: Path):
+        """Test that all macros are copied."""
+        ldf_dir = tmp_path / ".ldf"
+        ldf_dir.mkdir()
+
+        _copy_macros(ldf_dir)
+
+        macros_dir = ldf_dir / "macros"
+        assert macros_dir.exists()
+        assert (macros_dir / "clarify-first.md").exists()
+        assert (macros_dir / "coverage-gate.md").exists()
+        assert (macros_dir / "task-guardrails.md").exists()
+
+    def test_creates_macros_directory(self, tmp_path: Path):
+        """Test that macros directory is created if missing."""
+        ldf_dir = tmp_path / ".ldf"
+        ldf_dir.mkdir()
+
+        _copy_macros(ldf_dir)
+
+        assert (ldf_dir / "macros").exists()
+
+    def test_handles_missing_source_macros(self, tmp_path: Path, monkeypatch):
+        """Test that missing source macros are handled gracefully."""
+        ldf_dir = tmp_path / ".ldf"
+        ldf_dir.mkdir()
+
+        # Create a temp framework dir without macros
+        fake_framework = tmp_path / "fake_framework"
+        (fake_framework / "macros").mkdir(parents=True)
+
+        monkeypatch.setattr("ldf.init.FRAMEWORK_DIR", fake_framework)
+
+        # Should not raise an error
+        _copy_macros(ldf_dir)
+
+
+class TestCreateClaudeCommands:
+    """Tests for _create_claude_commands function."""
+
+    def test_creates_commands_directory(self, tmp_path: Path):
+        """Test that .claude/commands directory is created."""
+        _create_claude_commands(tmp_path)
+
+        commands_dir = tmp_path / ".claude" / "commands"
+        assert commands_dir.exists()
+
+    def test_creates_all_command_files(self, tmp_path: Path):
+        """Test that all command files are created."""
+        _create_claude_commands(tmp_path)
+
+        commands_dir = tmp_path / ".claude" / "commands"
+        assert (commands_dir / "create-spec.md").exists()
+        assert (commands_dir / "implement-task.md").exists()
+        assert (commands_dir / "review-spec.md").exists()
+
+    def test_command_file_contents(self, tmp_path: Path):
+        """Test that command files have expected content."""
+        _create_claude_commands(tmp_path)
+
+        commands_dir = tmp_path / ".claude" / "commands"
+
+        create_spec = (commands_dir / "create-spec.md").read_text()
+        assert "feature-name" in create_spec
+        assert "Question Packs" in create_spec
+
+        implement_task = (commands_dir / "implement-task.md").read_text()
+        assert "spec-name" in implement_task
+        assert "task-number" in implement_task
+
+        review_spec = (commands_dir / "review-spec.md").read_text()
+        assert "Coverage-Gate" in review_spec
+
+
+class TestRepairProject:
+    """Tests for repair_project function."""
+
+    def test_repair_creates_missing_directories(self, tmp_path: Path, capsys):
+        """Test that repair creates missing directories."""
+        ldf_dir = tmp_path / ".ldf"
+        ldf_dir.mkdir()
+        # Only create config
+        (ldf_dir / "config.yaml").write_text("version: '1.0'\n")
+
+        repair_project(tmp_path)
+
+        captured = capsys.readouterr()
+        assert "Repair complete" in captured.out
+        assert (ldf_dir / "specs").exists()
+        assert (ldf_dir / "question-packs").exists()
+        assert (ldf_dir / "templates").exists()
+        assert (ldf_dir / "macros").exists()
+        assert (ldf_dir / "audit-history").exists()
+
+    def test_repair_creates_missing_config(self, tmp_path: Path, capsys):
+        """Test that repair creates missing config.yaml."""
+        ldf_dir = tmp_path / ".ldf"
+        ldf_dir.mkdir()
+        (ldf_dir / "question-packs").mkdir()
+
+        repair_project(tmp_path)
+
+        captured = capsys.readouterr()
+        assert "Created config.yaml" in captured.out
+        assert (ldf_dir / "config.yaml").exists()
+
+    def test_repair_creates_missing_guardrails(self, tmp_path: Path, capsys):
+        """Test that repair creates missing guardrails.yaml."""
+        ldf_dir = tmp_path / ".ldf"
+        ldf_dir.mkdir()
+        (ldf_dir / "config.yaml").write_text("version: '1.0'\n")
+
+        repair_project(tmp_path)
+
+        captured = capsys.readouterr()
+        assert "Created guardrails.yaml" in captured.out
+        assert (ldf_dir / "guardrails.yaml").exists()
+
+    def test_repair_adds_missing_templates(self, tmp_path: Path, capsys):
+        """Test that repair adds missing template files."""
+        ldf_dir = tmp_path / ".ldf"
+        ldf_dir.mkdir()
+        (ldf_dir / "config.yaml").write_text("version: '1.0'\n")
+        (ldf_dir / "templates").mkdir()
+        # Only create one template
+        (ldf_dir / "templates" / "requirements.md").write_text("# Requirements\n")
+
+        repair_project(tmp_path)
+
+        captured = capsys.readouterr()
+        assert "Added template: design.md" in captured.out
+        assert "Added template: tasks.md" in captured.out
+
+    def test_repair_adds_missing_macros(self, tmp_path: Path, capsys):
+        """Test that repair adds missing macro files."""
+        ldf_dir = tmp_path / ".ldf"
+        ldf_dir.mkdir()
+        (ldf_dir / "config.yaml").write_text("version: '1.0'\n")
+        (ldf_dir / "macros").mkdir()
+
+        repair_project(tmp_path)
+
+        captured = capsys.readouterr()
+        assert "Added macro:" in captured.out
+
+    def test_repair_adds_missing_question_packs(self, tmp_path: Path, capsys):
+        """Test that repair adds missing question packs."""
+        ldf_dir = tmp_path / ".ldf"
+        ldf_dir.mkdir()
+        (ldf_dir / "question-packs").mkdir()
+        config = {"version": "1.0", "question_packs": ["security", "testing"]}
+        (ldf_dir / "config.yaml").write_text(yaml.safe_dump(config))
+
+        repair_project(tmp_path)
+
+        captured = capsys.readouterr()
+        assert "Added question pack:" in captured.out
+        assert (ldf_dir / "question-packs" / "security.yaml").exists()
+
+    def test_repair_creates_claude_md(self, tmp_path: Path, capsys):
+        """Test that repair creates missing CLAUDE.md."""
+        ldf_dir = tmp_path / ".ldf"
+        ldf_dir.mkdir()
+        (ldf_dir / "config.yaml").write_text("version: '1.0'\n")
+
+        repair_project(tmp_path)
+
+        captured = capsys.readouterr()
+        assert "Created CLAUDE.md" in captured.out
+        assert (tmp_path / "CLAUDE.md").exists()
+
+    def test_repair_creates_claude_commands(self, tmp_path: Path, capsys):
+        """Test that repair creates missing .claude/commands."""
+        ldf_dir = tmp_path / ".ldf"
+        ldf_dir.mkdir()
+        (ldf_dir / "config.yaml").write_text("version: '1.0'\n")
+
+        repair_project(tmp_path)
+
+        captured = capsys.readouterr()
+        assert "Created .claude/commands/" in captured.out
+        assert (tmp_path / ".claude" / "commands" / "create-spec.md").exists()
+
+    def test_repair_updates_config_with_missing_fields(self, tmp_path: Path, capsys):
+        """Test that repair adds missing fields to existing config."""
+        ldf_dir = tmp_path / ".ldf"
+        ldf_dir.mkdir()
+        (ldf_dir / "question-packs").mkdir()
+        # Create config without framework_version or checksums
+        config = {"version": "1.0", "question_packs": []}
+        (ldf_dir / "config.yaml").write_text(yaml.safe_dump(config))
+
+        repair_project(tmp_path)
+
+        captured = capsys.readouterr()
+        assert "Updated config.yaml with missing fields" in captured.out
+
+        # Verify fields were added
+        with open(ldf_dir / "config.yaml") as f:
+            updated_config = yaml.safe_load(f)
+        assert "framework_version" in updated_config
+
+    def test_repair_no_changes_needed(self, tmp_path: Path, capsys, monkeypatch):
+        """Test that repair reports when no changes are needed."""
+        monkeypatch.chdir(tmp_path)
+
+        # First do a complete initialization
+        initialize_project(
+            project_path=tmp_path,
+            preset="custom",
+            question_packs=["security"],
+            mcp_servers=["spec-inspector"],
+            non_interactive=True,
+        )
+
+        # Clear the output
+        capsys.readouterr()
+
+        # Now run repair
+        repair_project(tmp_path)
+
+        captured = capsys.readouterr()
+        assert "No repairs needed" in captured.out
+
+    def test_repair_handles_corrupt_config(self, tmp_path: Path, capsys):
+        """Test that repair handles corrupt config.yaml gracefully."""
+        ldf_dir = tmp_path / ".ldf"
+        ldf_dir.mkdir()
+        # Write invalid YAML
+        (ldf_dir / "config.yaml").write_text("invalid: yaml: syntax: [broken")
+
+        repair_project(tmp_path)
+
+        # Should still complete (uses defaults when config can't be parsed)
+        captured = capsys.readouterr()
+        # Should have created/repaired files despite corrupt config
+        assert (ldf_dir / "guardrails.yaml").exists() or "No repairs needed" in captured.out
+
+    def test_repair_uses_config_values(self, tmp_path: Path, capsys):
+        """Test that repair uses values from existing config."""
+        ldf_dir = tmp_path / ".ldf"
+        ldf_dir.mkdir()
+        config = {
+            "version": "1.0",
+            "guardrails": {"preset": "fintech"},
+            "question_packs": ["security", "testing"],
+            "mcp_servers": ["spec-inspector"],
+            "framework_version": "1.0.0",
+            "_checksums": {},
+        }
+        (ldf_dir / "config.yaml").write_text(yaml.safe_dump(config))
+
+        repair_project(tmp_path)
+
+        # Check that CLAUDE.md was created with fintech preset (90% coverage)
+        claude_md = (tmp_path / "CLAUDE.md").read_text()
+        assert "fintech" in claude_md
+        assert "90%" in claude_md
+
+    def test_repair_computes_checksums_for_existing_packs(self, tmp_path: Path, capsys):
+        """Test that repair computes checksums for existing question packs."""
+        ldf_dir = tmp_path / ".ldf"
+        ldf_dir.mkdir()
+        qp_dir = ldf_dir / "question-packs"
+        qp_dir.mkdir()
+        # Create a question pack file
+        (qp_dir / "security.yaml").write_text("name: security\n")
+        # Config without checksums
+        config = {"version": "1.0", "question_packs": ["security"]}
+        (ldf_dir / "config.yaml").write_text(yaml.safe_dump(config))
+
+        repair_project(tmp_path)
+
+        # Verify checksums were added
+        with open(ldf_dir / "config.yaml") as f:
+            updated_config = yaml.safe_load(f)
+        assert "_checksums" in updated_config
+        assert "question-packs/security.yaml" in updated_config["_checksums"]
+
+    def test_repair_from_empty_ldf_dir(self, tmp_path: Path, capsys):
+        """Test repair when .ldf directory is completely empty."""
+        ldf_dir = tmp_path / ".ldf"
+        ldf_dir.mkdir()
+
+        repair_project(tmp_path)
+
+        captured = capsys.readouterr()
+        assert "Repair complete" in captured.out
+        # Should have created all necessary structure
+        assert (ldf_dir / "config.yaml").exists()
+        assert (ldf_dir / "guardrails.yaml").exists()
+        assert (ldf_dir / "specs").exists()
+        assert (tmp_path / "CLAUDE.md").exists()
+
+    def test_repair_with_partial_claude_commands(self, tmp_path: Path, capsys):
+        """Test repair when .claude/commands exists but is empty."""
+        ldf_dir = tmp_path / ".ldf"
+        ldf_dir.mkdir()
+        (ldf_dir / "config.yaml").write_text("version: '1.0'\n")
+
+        # Create empty .claude/commands
+        commands_dir = tmp_path / ".claude" / "commands"
+        commands_dir.mkdir(parents=True)
+
+        repair_project(tmp_path)
+
+        captured = capsys.readouterr()
+        assert "Created .claude/commands/" in captured.out
+        assert (commands_dir / "create-spec.md").exists()

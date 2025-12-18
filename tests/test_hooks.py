@@ -986,3 +986,81 @@ class TestInstallHooksRuntimeError:
         assert result is False
         captured = capsys.readouterr()
         assert "Test error message" in captured.out
+
+
+class TestUtilsHooksDefaultPaths:
+    """Tests for utils/hooks functions using default paths (cwd)."""
+
+    def test_detect_project_languages_uses_cwd(self, tmp_path: Path, monkeypatch):
+        """Test detect_project_languages uses cwd when no root provided."""
+        (tmp_path / "pyproject.toml").write_text("[build-system]\n")
+        monkeypatch.chdir(tmp_path)
+
+        result = detect_project_languages()
+
+        assert result["python"] is True
+
+    def test_get_git_hooks_dir_uses_cwd(self, tmp_path: Path, monkeypatch):
+        """Test get_git_hooks_dir uses cwd when no root provided."""
+        (tmp_path / ".git").mkdir()
+        monkeypatch.chdir(tmp_path)
+
+        result = get_git_hooks_dir()
+
+        assert result == tmp_path / ".git" / "hooks"
+
+    def test_update_config_with_hooks_uses_cwd(self, temp_project: Path, monkeypatch):
+        """Test update_config_with_hooks uses cwd when no root provided."""
+        monkeypatch.chdir(temp_project)
+        config = get_default_hooks_config()
+
+        update_config_with_hooks(config)
+
+        # Verify config was written
+        import yaml
+        config_path = temp_project / ".ldf" / "config.yaml"
+        with open(config_path) as f:
+            saved = yaml.safe_load(f)
+        assert "hooks" in saved
+
+    def test_update_config_with_hooks_creates_empty_config(self, tmp_path: Path, monkeypatch):
+        """Test update_config_with_hooks works when no config exists."""
+        ldf_dir = tmp_path / ".ldf"
+        ldf_dir.mkdir()
+        monkeypatch.chdir(tmp_path)
+        config = get_default_hooks_config()
+
+        update_config_with_hooks(config, tmp_path)
+
+        import yaml
+        config_path = ldf_dir / "config.yaml"
+        with open(config_path) as f:
+            saved = yaml.safe_load(f)
+        assert "hooks" in saved
+
+
+class TestUninstallHookNotGitRepo:
+    """Tests for uninstall_hook when not a git repository."""
+
+    def test_uninstall_returns_false_not_git_repo(self, tmp_path: Path):
+        """Test uninstall_hook returns False when not in a git repo."""
+        result = uninstall_hook(tmp_path)
+
+        assert result is False
+
+
+class TestGeneratePrecommitScriptMissingTemplate:
+    """Tests for generate_precommit_script when template is missing."""
+
+    def test_raises_runtime_error_when_template_missing(self, monkeypatch):
+        """Test RuntimeError when pre-commit template is not found."""
+        from ldf.utils import hooks
+
+        # Mock the template path to not exist
+        fake_path = Path("/nonexistent/template.j2")
+        monkeypatch.setattr(hooks, "PRE_COMMIT_TEMPLATE_PATH", fake_path)
+
+        config = get_default_hooks_config()
+
+        with pytest.raises(RuntimeError, match="Pre-commit template not found"):
+            generate_precommit_script(config)

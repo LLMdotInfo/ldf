@@ -1,8 +1,21 @@
 """Tests for ldf.audit module."""
 
+import json
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
-from ldf.audit import _build_audit_request, _redact_content, run_audit
+import pytest
+import yaml
+
+from ldf.audit import (
+    _build_audit_prompt_for_api,
+    _build_audit_request,
+    _import_feedback,
+    _redact_content,
+    _run_api_audit,
+    run_audit,
+)
+from ldf.audit_api import AuditResponse
 
 
 class TestRedaction:
@@ -407,3 +420,417 @@ class TestAuditOutputFormat:
         output = json.loads(captured.out)
         assert "error" in output
         assert "agent" in output["error"].lower()
+
+
+class TestBuildAuditPromptForApi:
+    """Tests for _build_audit_prompt_for_api function."""
+
+    def test_returns_none_if_no_specs_dir(self, tmp_path: Path, monkeypatch, capsys):
+        """Test that function returns None if .ldf/specs doesn't exist."""
+        monkeypatch.chdir(tmp_path)
+
+        result = _build_audit_prompt_for_api("spec-review", False, None)
+
+        assert result is None
+        captured = capsys.readouterr()
+        assert "not found" in captured.out
+
+    def test_returns_none_if_spec_not_found(self, temp_project: Path, monkeypatch, capsys):
+        """Test that function returns None if specific spec doesn't exist."""
+        monkeypatch.chdir(temp_project)
+
+        result = _build_audit_prompt_for_api("spec-review", False, "nonexistent")
+
+        assert result is None
+        captured = capsys.readouterr()
+        assert "not found" in captured.out
+
+    def test_returns_none_if_no_specs(self, temp_project: Path, monkeypatch, capsys):
+        """Test that function returns None if no specs exist."""
+        # Ensure specs directory exists but is empty
+        specs_dir = temp_project / ".ldf" / "specs"
+        specs_dir.mkdir(exist_ok=True)
+        # Remove any existing specs
+        for d in specs_dir.iterdir():
+            if d.is_dir():
+                import shutil
+                shutil.rmtree(d)
+
+        monkeypatch.chdir(temp_project)
+
+        result = _build_audit_prompt_for_api("spec-review", False, None)
+
+        assert result is None
+        captured = capsys.readouterr()
+        assert "No specs found" in captured.out
+
+    def test_returns_prompt_for_specific_spec(self, temp_project_with_specs: Path, monkeypatch):
+        """Test that function returns prompt for specific spec."""
+        monkeypatch.chdir(temp_project_with_specs)
+
+        result = _build_audit_prompt_for_api("spec-review", False, "feature-a")
+
+        assert result is not None
+        assert "feature-a" in result
+        assert "feature-b" not in result
+
+
+class TestRunApiAudit:
+    """Tests for _run_api_audit function."""
+
+    def test_unconfigured_gemini_shows_config_example(
+        self, temp_project_with_specs: Path, monkeypatch, capsys
+    ):
+        """Test that unconfigured Gemini shows config example."""
+        monkeypatch.chdir(temp_project_with_specs)
+
+        _run_api_audit(
+            audit_type="spec-review",
+            agent="gemini",
+            auto_import=False,
+            include_secrets=False,
+            skip_confirm=True,
+            spec_name=None,
+        )
+
+        captured = capsys.readouterr()
+        assert "gemini" in captured.out
+        assert "not configured" in captured.out
+        assert "GOOGLE_API_KEY" in captured.out
+
+    def test_unconfigured_provider_json_output(
+        self, temp_project_with_specs: Path, monkeypatch, capsys
+    ):
+        """Test JSON output for unconfigured provider."""
+        monkeypatch.chdir(temp_project_with_specs)
+
+        _run_api_audit(
+            audit_type="spec-review",
+            agent="chatgpt",
+            auto_import=False,
+            include_secrets=False,
+            skip_confirm=True,
+            spec_name=None,
+            output_format="json",
+        )
+
+        captured = capsys.readouterr()
+        output = json.loads(captured.out)
+        assert "error" in output
+        assert "not configured" in output["error"]
+
+    def test_full_audit_runs_multiple_types(
+        self, temp_project_with_specs: Path, monkeypatch, capsys
+    ):
+        """Test that 'full' audit type runs multiple audit types."""
+        monkeypatch.chdir(temp_project_with_specs)
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+
+        # Configure ChatGPT
+        config_path = temp_project_with_specs / ".ldf" / "config.yaml"
+        config = {
+            "version": "1.0",
+            "audit_api": {"chatgpt": {"api_key": "${OPENAI_API_KEY}", "model": "gpt-4"}},
+        }
+        config_path.write_text(yaml.safe_dump(config))
+
+        mock_response = AuditResponse(
+            success=True,
+            provider="chatgpt",
+            audit_type="spec-review",
+            spec_name=None,
+            content="## Findings\n\nNo issues.",
+            timestamp="2024-01-15T10:00:00",
+            usage={"total_tokens": 100},
+        )
+
+        with patch("ldf.audit_api.run_api_audit", return_value=mock_response):
+            with patch("ldf.audit_api.save_audit_response") as mock_save:
+                mock_save.return_value = Path("/tmp/saved.md")
+
+                _run_api_audit(
+                    audit_type="full",
+                    agent="chatgpt",
+                    auto_import=False,
+                    include_secrets=False,
+                    skip_confirm=True,
+                    spec_name=None,
+                )
+
+        captured = capsys.readouterr()
+        assert "Running full audit" in captured.out
+
+    def test_successful_api_audit(
+        self, temp_project_with_specs: Path, monkeypatch, capsys
+    ):
+        """Test successful API audit."""
+        monkeypatch.chdir(temp_project_with_specs)
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+
+        # Configure ChatGPT
+        config_path = temp_project_with_specs / ".ldf" / "config.yaml"
+        config = {
+            "version": "1.0",
+            "audit_api": {"chatgpt": {"api_key": "${OPENAI_API_KEY}", "model": "gpt-4"}},
+        }
+        config_path.write_text(yaml.safe_dump(config))
+
+        mock_response = AuditResponse(
+            success=True,
+            provider="chatgpt",
+            audit_type="spec-review",
+            spec_name=None,
+            content="## Findings\n\nNo issues.",
+            timestamp="2024-01-15T10:00:00",
+            usage={"total_tokens": 100},
+        )
+
+        with patch("ldf.audit_api.run_api_audit", return_value=mock_response):
+            with patch("ldf.audit_api.save_audit_response") as mock_save:
+                mock_save.return_value = Path("/tmp/saved.md")
+
+                _run_api_audit(
+                    audit_type="spec-review",
+                    agent="chatgpt",
+                    auto_import=False,
+                    include_secrets=False,
+                    skip_confirm=True,
+                    spec_name=None,
+                )
+
+        captured = capsys.readouterr()
+        assert "Saved:" in captured.out
+        assert "Audit complete" in captured.out
+
+    def test_successful_api_audit_with_auto_import(
+        self, temp_project_with_specs: Path, monkeypatch, capsys
+    ):
+        """Test successful API audit with auto-import."""
+        monkeypatch.chdir(temp_project_with_specs)
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+
+        # Configure ChatGPT
+        config_path = temp_project_with_specs / ".ldf" / "config.yaml"
+        config = {
+            "version": "1.0",
+            "audit_api": {"chatgpt": {"api_key": "${OPENAI_API_KEY}", "model": "gpt-4"}},
+        }
+        config_path.write_text(yaml.safe_dump(config))
+
+        mock_response = AuditResponse(
+            success=True,
+            provider="chatgpt",
+            audit_type="spec-review",
+            spec_name=None,
+            content="## Findings\n\nNo issues.",
+            timestamp="2024-01-15T10:00:00",
+            usage={"total_tokens": 100},
+        )
+
+        with patch("ldf.audit_api.run_api_audit", return_value=mock_response):
+            with patch("ldf.audit_api.save_audit_response") as mock_save:
+                mock_save.return_value = Path("/tmp/saved.md")
+
+                _run_api_audit(
+                    audit_type="spec-review",
+                    agent="chatgpt",
+                    auto_import=True,  # Auto-import enabled
+                    include_secrets=False,
+                    skip_confirm=True,
+                    spec_name=None,
+                )
+
+        captured = capsys.readouterr()
+        assert "Audit Response" in captured.out
+        assert "auto-imported" in captured.out
+
+    def test_failed_api_audit(
+        self, temp_project_with_specs: Path, monkeypatch, capsys
+    ):
+        """Test failed API audit."""
+        monkeypatch.chdir(temp_project_with_specs)
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+
+        # Configure ChatGPT
+        config_path = temp_project_with_specs / ".ldf" / "config.yaml"
+        config = {
+            "version": "1.0",
+            "audit_api": {"chatgpt": {"api_key": "${OPENAI_API_KEY}", "model": "gpt-4"}},
+        }
+        config_path.write_text(yaml.safe_dump(config))
+
+        mock_response = AuditResponse(
+            success=False,
+            provider="chatgpt",
+            audit_type="spec-review",
+            spec_name=None,
+            content="",
+            timestamp="2024-01-15T10:00:00",
+            errors=["API timeout", "Retry failed"],
+        )
+
+        with patch("ldf.audit_api.run_api_audit", return_value=mock_response):
+            _run_api_audit(
+                audit_type="spec-review",
+                agent="chatgpt",
+                auto_import=False,
+                include_secrets=False,
+                skip_confirm=True,
+                spec_name=None,
+            )
+
+        captured = capsys.readouterr()
+        assert "failed" in captured.out.lower()
+        assert "API timeout" in captured.out
+
+    def test_api_audit_json_output(
+        self, temp_project_with_specs: Path, monkeypatch, capsys
+    ):
+        """Test API audit with JSON output."""
+        monkeypatch.chdir(temp_project_with_specs)
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+
+        # Configure ChatGPT
+        config_path = temp_project_with_specs / ".ldf" / "config.yaml"
+        config = {
+            "version": "1.0",
+            "audit_api": {"chatgpt": {"api_key": "${OPENAI_API_KEY}", "model": "gpt-4"}},
+        }
+        config_path.write_text(yaml.safe_dump(config))
+
+        mock_response = AuditResponse(
+            success=True,
+            provider="chatgpt",
+            audit_type="spec-review",
+            spec_name=None,
+            content="## Findings",
+            timestamp="2024-01-15T10:00:00",
+            usage={"total_tokens": 100},
+        )
+
+        with patch("ldf.audit_api.run_api_audit", return_value=mock_response):
+            with patch("ldf.audit_api.save_audit_response") as mock_save:
+                mock_save.return_value = Path("/tmp/saved.md")
+
+                _run_api_audit(
+                    audit_type="spec-review",
+                    agent="chatgpt",
+                    auto_import=False,
+                    include_secrets=False,
+                    skip_confirm=True,
+                    spec_name=None,
+                    output_format="json",
+                )
+
+        captured = capsys.readouterr()
+        output = json.loads(captured.out)
+        assert output["audit_type"] == "spec-review"
+        assert output["summary"]["successful"] == 1
+
+
+class TestImportFeedback:
+    """Tests for _import_feedback function."""
+
+    def test_import_creates_audit_history_dir(self, temp_project: Path, monkeypatch, capsys):
+        """Test that import creates audit-history directory."""
+        monkeypatch.chdir(temp_project)
+
+        # Create feedback file
+        feedback = temp_project / "feedback.md"
+        feedback.write_text("## Findings\n\nNo issues.")
+
+        # Ensure audit-history doesn't exist
+        audit_dir = temp_project / ".ldf" / "audit-history"
+        if audit_dir.exists():
+            import shutil
+            shutil.rmtree(audit_dir)
+
+        _import_feedback(feedback)
+
+        assert audit_dir.exists()
+        files = list(audit_dir.glob("feedback-*.md"))
+        assert len(files) == 1
+
+    def test_import_displays_content(self, temp_project: Path, monkeypatch, capsys):
+        """Test that import displays the feedback content."""
+        monkeypatch.chdir(temp_project)
+
+        # Create feedback file
+        feedback = temp_project / "feedback.md"
+        feedback.write_text("## Findings\n\nNo issues.")
+
+        _import_feedback(feedback)
+
+        captured = capsys.readouterr()
+        assert "Importing feedback" in captured.out
+
+
+class TestFullAuditType:
+    """Tests for 'full' audit type."""
+
+    def test_full_audit_includes_all_sections(self, temp_project_with_specs: Path, monkeypatch):
+        """Test that 'full' audit type includes all review sections."""
+        monkeypatch.chdir(temp_project_with_specs)
+        specs_dir = temp_project_with_specs / ".ldf" / "specs"
+        specs = list(specs_dir.iterdir())
+
+        content = _build_audit_request("full", specs, include_secrets=False)
+
+        # Should include content from all audit types
+        assert "Requirements completeness" in content
+        # "security vulnerabilities" is lowercase in actual content
+        assert "security vulnerabilities" in content.lower()
+        assert "Missing requirements" in content
+        assert "Boundary conditions" in content
+        assert "Architecture" in content
+
+
+class TestAdditionalRedaction:
+    """Tests for additional redaction patterns."""
+
+    def test_redacts_github_tokens(self):
+        """Test that GitHub tokens are redacted."""
+        # Use a format that matches the specific GitHub token pattern
+        content = "My token is ghp_1234567890123456789012345678901234567890."
+        redacted = _redact_content(content)
+        assert "ghp_1234567890" not in redacted
+        assert "REDACTED" in redacted
+
+    def test_redacts_slack_tokens(self):
+        """Test that Slack tokens are redacted."""
+        # Use a format that matches the specific Slack token pattern
+        content = "My slack: xoxb-123456789012-1234567890123-AbcDefGhiJklMnoPqrS here"
+        redacted = _redact_content(content)
+        assert "xoxb-123456789012" not in redacted
+        assert "REDACTED" in redacted
+
+    def test_redacts_gitlab_tokens(self):
+        """Test that GitLab tokens are redacted."""
+        content = "My gitlab: glpat-1234567890abcdefghij here"
+        redacted = _redact_content(content)
+        assert "glpat-1234567890" not in redacted
+        assert "REDACTED" in redacted
+
+    def test_redacts_npm_tokens(self):
+        """Test that npm tokens are redacted."""
+        content = "NPM token is npm_1234567890abcdefghijklmnopqrstuvwxyz!"
+        redacted = _redact_content(content)
+        assert "npm_1234567890" not in redacted
+        assert "REDACTED" in redacted
+
+    def test_redacts_pem_private_keys(self):
+        """Test that PEM private keys are redacted."""
+        content = """-----BEGIN RSA PRIVATE KEY-----
+MIIEowIBAAKCAQEAn7lqz/abcd1234567890abcd1234567890
+-----END RSA PRIVATE KEY-----"""
+        redacted = _redact_content(content)
+        assert "MIIEowIBAAKCAQEAn7lqz" not in redacted
+        assert "[PEM_KEY_REDACTED]" in redacted
+
+    def test_redacts_jwt_tokens(self):
+        """Test that JWT tokens are redacted."""
+        # JWT tokens are matched by the specific JWT pattern
+        content = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U"
+        redacted = _redact_content(content)
+        assert "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9" not in redacted
+        assert "[JWT_REDACTED]" in redacted

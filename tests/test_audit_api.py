@@ -1,5 +1,10 @@
 """Tests for ldf/audit_api.py - API integration for automated audits."""
 
+import asyncio
+from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 from ldf.audit_api import (
     AuditConfig,
@@ -9,6 +14,7 @@ from ldf.audit_api import (
     _resolve_env_var,
     get_auditor,
     load_api_config,
+    run_api_audit,
     save_audit_response,
 )
 
@@ -401,3 +407,389 @@ class TestSystemPrompts:
 
         prompt = auditor._get_system_prompt("architecture")
         assert "architecture" in prompt.lower() or "design" in prompt.lower()
+
+
+class TestChatGPTAuditorAudit:
+    """Tests for ChatGPT auditor audit method."""
+
+    @pytest.mark.asyncio
+    async def test_audit_success(self):
+        """Test successful ChatGPT audit with mocked API."""
+        config = AuditConfig(
+            provider="chatgpt",
+            api_key="test-key",
+            model="gpt-4",
+            timeout=10,
+        )
+        auditor = ChatGPTAuditor(config)
+
+        # Create mock response
+        mock_message = MagicMock()
+        mock_message.content = "## Findings\n\nNo issues found."
+        mock_choice = MagicMock()
+        mock_choice.message = mock_message
+        mock_usage = MagicMock()
+        mock_usage.prompt_tokens = 100
+        mock_usage.completion_tokens = 50
+        mock_usage.total_tokens = 150
+        mock_response = MagicMock()
+        mock_response.choices = [mock_choice]
+        mock_response.usage = mock_usage
+
+        mock_client = MagicMock()
+        mock_client.chat.completions.create = AsyncMock(return_value=mock_response)
+
+        # Mock the openai module at import time
+        mock_openai = MagicMock()
+        mock_openai.AsyncOpenAI.return_value = mock_client
+
+        with patch.dict("sys.modules", {"openai": mock_openai}):
+            response = await auditor.audit("test prompt", "spec-review", "test-spec")
+
+        assert response.success is True
+        assert response.content == "## Findings\n\nNo issues found."
+        assert response.usage["total_tokens"] == 150
+
+    @pytest.mark.asyncio
+    async def test_audit_timeout(self):
+        """Test ChatGPT audit timeout."""
+        config = AuditConfig(
+            provider="chatgpt",
+            api_key="test-key",
+            model="gpt-4",
+            timeout=1,
+        )
+        auditor = ChatGPTAuditor(config)
+
+        async def slow_response(*args, **kwargs):
+            await asyncio.sleep(10)
+
+        mock_client = MagicMock()
+        mock_client.chat.completions.create = slow_response
+
+        mock_openai = MagicMock()
+        mock_openai.AsyncOpenAI.return_value = mock_client
+
+        with patch.dict("sys.modules", {"openai": mock_openai}):
+            response = await auditor.audit("test prompt", "spec-review")
+
+        assert response.success is False
+        assert "timed out" in response.errors[0]
+
+    @pytest.mark.asyncio
+    async def test_audit_api_error(self):
+        """Test ChatGPT audit API error handling."""
+        config = AuditConfig(
+            provider="chatgpt",
+            api_key="test-key",
+            model="gpt-4",
+        )
+        auditor = ChatGPTAuditor(config)
+
+        mock_client = MagicMock()
+        mock_client.chat.completions.create = AsyncMock(
+            side_effect=Exception("API rate limit exceeded")
+        )
+
+        mock_openai = MagicMock()
+        mock_openai.AsyncOpenAI.return_value = mock_client
+
+        with patch.dict("sys.modules", {"openai": mock_openai}):
+            response = await auditor.audit("test prompt", "spec-review")
+
+        assert response.success is False
+        assert "API error" in response.errors[0]
+
+    @pytest.mark.asyncio
+    async def test_audit_no_usage_data(self):
+        """Test ChatGPT audit when response has no usage data."""
+        config = AuditConfig(
+            provider="chatgpt",
+            api_key="test-key",
+            model="gpt-4",
+        )
+        auditor = ChatGPTAuditor(config)
+
+        mock_message = MagicMock()
+        mock_message.content = "Response"
+        mock_choice = MagicMock()
+        mock_choice.message = mock_message
+        mock_response = MagicMock()
+        mock_response.choices = [mock_choice]
+        mock_response.usage = None
+
+        mock_client = MagicMock()
+        mock_client.chat.completions.create = AsyncMock(return_value=mock_response)
+
+        mock_openai = MagicMock()
+        mock_openai.AsyncOpenAI.return_value = mock_client
+
+        with patch.dict("sys.modules", {"openai": mock_openai}):
+            response = await auditor.audit("test prompt", "spec-review")
+
+        assert response.success is True
+        assert response.usage["total_tokens"] == 0
+
+
+class TestGeminiAuditorAudit:
+    """Tests for Gemini auditor audit method."""
+
+    @pytest.mark.asyncio
+    async def test_audit_success(self):
+        """Test successful Gemini audit with mocked API."""
+        import types
+
+        config = AuditConfig(
+            provider="gemini",
+            api_key="test-key",
+            model="gemini-pro",
+            timeout=10,
+        )
+        auditor = GeminiAuditor(config)
+
+        mock_response = MagicMock()
+        mock_response.text = "## Findings\n\nAll good."
+
+        mock_model = MagicMock()
+        mock_model.generate_content.return_value = mock_response
+
+        # Create a proper module mock
+        mock_genai = types.ModuleType("google.generativeai")
+        mock_genai.configure = MagicMock()
+        mock_genai.GenerativeModel = MagicMock(return_value=mock_model)
+
+        mock_google = types.ModuleType("google")
+        mock_google.generativeai = mock_genai
+
+        with patch.dict("sys.modules", {"google.generativeai": mock_genai, "google": mock_google}):
+            response = await auditor.audit("test prompt", "security")
+
+        assert response.success is True
+        assert response.content == "## Findings\n\nAll good."
+
+    @pytest.mark.asyncio
+    async def test_audit_timeout(self):
+        """Test Gemini audit timeout."""
+        import types
+
+        config = AuditConfig(
+            provider="gemini",
+            api_key="test-key",
+            model="gemini-pro",
+            timeout=1,
+        )
+        auditor = GeminiAuditor(config)
+
+        def slow_generate(*args, **kwargs):
+            import time
+            time.sleep(10)
+
+        mock_model = MagicMock()
+        mock_model.generate_content = slow_generate
+
+        mock_genai = types.ModuleType("google.generativeai")
+        mock_genai.configure = MagicMock()
+        mock_genai.GenerativeModel = MagicMock(return_value=mock_model)
+
+        mock_google = types.ModuleType("google")
+        mock_google.generativeai = mock_genai
+
+        with patch.dict("sys.modules", {"google.generativeai": mock_genai, "google": mock_google}):
+            response = await auditor.audit("test prompt", "spec-review")
+
+        assert response.success is False
+        assert "timed out" in response.errors[0]
+
+    @pytest.mark.asyncio
+    async def test_audit_api_error(self):
+        """Test Gemini audit API error handling."""
+        import types
+
+        config = AuditConfig(
+            provider="gemini",
+            api_key="test-key",
+            model="gemini-pro",
+        )
+        auditor = GeminiAuditor(config)
+
+        mock_model = MagicMock()
+        mock_model.generate_content.side_effect = Exception("Quota exceeded")
+
+        mock_genai = types.ModuleType("google.generativeai")
+        mock_genai.configure = MagicMock()
+        mock_genai.GenerativeModel = MagicMock(return_value=mock_model)
+
+        mock_google = types.ModuleType("google")
+        mock_google.generativeai = mock_genai
+
+        with patch.dict("sys.modules", {"google.generativeai": mock_genai, "google": mock_google}):
+            response = await auditor.audit("test prompt", "spec-review")
+
+        assert response.success is False
+        assert "API error" in response.errors[0]
+
+
+class TestRunApiAudit:
+    """Tests for run_api_audit function."""
+
+    @pytest.mark.asyncio
+    async def test_run_api_audit_provider_not_configured(self, tmp_path, monkeypatch):
+        """Test run_api_audit when provider is not configured."""
+        monkeypatch.chdir(tmp_path)
+        ldf_dir = tmp_path / ".ldf"
+        ldf_dir.mkdir()
+        (ldf_dir / "config.yaml").write_text("version: '1.0'\n")
+
+        response = await run_api_audit(
+            provider="chatgpt",
+            audit_type="spec-review",
+            prompt="Test prompt",
+        )
+
+        assert response.success is False
+        assert "not configured" in response.errors[0]
+
+    @pytest.mark.asyncio
+    async def test_run_api_audit_success(self, tmp_path, monkeypatch, capsys):
+        """Test run_api_audit success path."""
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+
+        ldf_dir = tmp_path / ".ldf"
+        ldf_dir.mkdir()
+        (ldf_dir / "config.yaml").write_text("""
+audit_api:
+  chatgpt:
+    api_key: ${OPENAI_API_KEY}
+    model: gpt-4
+""")
+
+        mock_response = AuditResponse(
+            success=True,
+            provider="chatgpt",
+            audit_type="spec-review",
+            spec_name=None,
+            content="## Findings",
+            timestamp="2024-01-15T10:00:00",
+            usage={"total_tokens": 100},
+        )
+
+        with patch.object(ChatGPTAuditor, "audit", return_value=mock_response):
+            response = await run_api_audit(
+                provider="chatgpt",
+                audit_type="spec-review",
+                prompt="Test prompt",
+            )
+
+        assert response.success is True
+        captured = capsys.readouterr()
+        assert "Audit complete" in captured.out
+        assert "100" in captured.out  # tokens
+
+    @pytest.mark.asyncio
+    async def test_run_api_audit_failure(self, tmp_path, monkeypatch, capsys):
+        """Test run_api_audit failure path."""
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+
+        ldf_dir = tmp_path / ".ldf"
+        ldf_dir.mkdir()
+        (ldf_dir / "config.yaml").write_text("""
+audit_api:
+  chatgpt:
+    api_key: ${OPENAI_API_KEY}
+    model: gpt-4
+""")
+
+        mock_response = AuditResponse(
+            success=False,
+            provider="chatgpt",
+            audit_type="spec-review",
+            spec_name=None,
+            content="",
+            timestamp="2024-01-15T10:00:00",
+            errors=["API timeout"],
+        )
+
+        with patch.object(ChatGPTAuditor, "audit", return_value=mock_response):
+            response = await run_api_audit(
+                provider="chatgpt",
+                audit_type="spec-review",
+                prompt="Test prompt",
+            )
+
+        assert response.success is False
+        captured = capsys.readouterr()
+        assert "failed" in captured.out.lower()
+
+
+class TestLoadApiConfigEdgeCases:
+    """Tests for edge cases in load_api_config."""
+
+    def test_load_api_config_default_cwd(self, tmp_path, monkeypatch):
+        """Test load_api_config uses cwd when no path given."""
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+
+        ldf_dir = tmp_path / ".ldf"
+        ldf_dir.mkdir()
+        (ldf_dir / "config.yaml").write_text("""
+audit_api:
+  chatgpt:
+    api_key: ${OPENAI_API_KEY}
+    model: gpt-4
+""")
+
+        configs = load_api_config()  # No path argument
+        assert "chatgpt" in configs
+
+    def test_load_api_config_corrupt_yaml(self, tmp_path):
+        """Test load_api_config handles corrupt YAML."""
+        ldf_dir = tmp_path / ".ldf"
+        ldf_dir.mkdir()
+        (ldf_dir / "config.yaml").write_text("invalid: yaml: [broken")
+
+        configs = load_api_config(tmp_path)
+        assert configs == {}
+
+
+class TestSaveAuditResponseEdgeCases:
+    """Tests for edge cases in save_audit_response."""
+
+    def test_save_audit_response_default_cwd(self, tmp_path, monkeypatch):
+        """Test save_audit_response uses cwd when no path given."""
+        monkeypatch.chdir(tmp_path)
+        ldf_dir = tmp_path / ".ldf"
+        ldf_dir.mkdir()
+
+        response = AuditResponse(
+            success=True,
+            provider="chatgpt",
+            audit_type="spec-review",
+            spec_name=None,
+            content="Test content",
+            timestamp="2024-01-15T10:00:00",
+        )
+
+        saved_path = save_audit_response(response)  # No path argument
+        assert saved_path.exists()
+        assert saved_path.parent == ldf_dir / "audit-history"
+
+    def test_save_audit_response_creates_audit_history_dir(self, tmp_path):
+        """Test save_audit_response creates audit-history if missing."""
+        ldf_dir = tmp_path / ".ldf"
+        ldf_dir.mkdir()
+        # Don't create audit-history
+
+        response = AuditResponse(
+            success=True,
+            provider="chatgpt",
+            audit_type="full",
+            spec_name=None,
+            content="Test",
+            timestamp="2024-01-15T10:00:00",
+        )
+
+        saved_path = save_audit_response(response, tmp_path)
+        assert saved_path.exists()
+        assert (ldf_dir / "audit-history").exists()

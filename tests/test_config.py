@@ -166,3 +166,50 @@ class TestSaveConfig:
 
         assert loaded["version"] == "2.0"
         assert loaded["project"]["name"] == "roundtrip"
+
+
+class TestConfigFunctionsWithCwd:
+    """Tests for config functions using cwd as default."""
+
+    def test_load_config_uses_cwd(self, temp_project: Path, monkeypatch):
+        """Test load_config uses cwd when no project_root provided."""
+        monkeypatch.chdir(temp_project)
+
+        config = load_config()
+
+        assert config is not None
+        assert "version" in config
+
+    def test_get_specs_dir_uses_cwd(self, temp_project: Path, monkeypatch):
+        """Test get_specs_dir uses cwd when no project_root provided."""
+        monkeypatch.chdir(temp_project)
+
+        specs_dir = get_specs_dir()
+
+        assert specs_dir == temp_project / ".ldf" / "specs"
+
+    def test_get_answerpacks_dir_uses_cwd(self, temp_project: Path, monkeypatch):
+        """Test get_answerpacks_dir uses cwd when no project_root provided."""
+        monkeypatch.chdir(temp_project)
+
+        answerpacks_dir = get_answerpacks_dir()
+
+        assert answerpacks_dir == temp_project / ".ldf" / "answerpacks"
+
+    def test_get_templates_dir_uses_cwd(self, temp_project: Path, monkeypatch):
+        """Test get_templates_dir uses cwd when no project_root provided."""
+        monkeypatch.chdir(temp_project)
+
+        templates_dir = get_templates_dir()
+
+        assert templates_dir == temp_project / ".ldf" / "templates"
+
+    def test_save_config_uses_cwd(self, tmp_path: Path, monkeypatch):
+        """Test save_config uses cwd when no project_root provided."""
+        monkeypatch.chdir(tmp_path)
+        config = {"version": "1.0", "project": {"name": "cwd-test"}}
+
+        save_config(config)
+
+        config_path = tmp_path / ".ldf" / "config.yaml"
+        assert config_path.exists()

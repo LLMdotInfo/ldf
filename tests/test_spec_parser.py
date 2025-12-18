@@ -3,9 +3,12 @@
 from pathlib import Path
 
 from ldf.utils.spec_parser import (
+    SpecInfo,
     SpecStatus,
+    _determine_status,
     extract_guardrail_matrix,
     extract_tasks,
+    get_spec_status,
     parse_spec,
 )
 
@@ -510,3 +513,306 @@ class TestSpecStatus:
         assert SpecStatus.DESIGN_DRAFT.value == "design_draft"
         assert SpecStatus.TASKS_DRAFT.value == "tasks_draft"
         assert SpecStatus.COMPLETE.value == "complete"
+
+
+class TestGetSpecStatus:
+    """Tests for get_spec_status function."""
+
+    def test_returns_not_started_for_empty_spec(self, tmp_path: Path):
+        """Test returning NOT_STARTED for empty spec directory."""
+        spec_dir = tmp_path / "empty-spec"
+        spec_dir.mkdir()
+
+        status = get_spec_status(spec_dir)
+
+        assert status == SpecStatus.NOT_STARTED
+
+    def test_returns_requirements_draft(self, tmp_path: Path):
+        """Test returning REQUIREMENTS_DRAFT for spec with unapproved requirements."""
+        spec_dir = tmp_path / "spec-with-req"
+        spec_dir.mkdir()
+        (spec_dir / "requirements.md").write_text("# Requirements\n")
+
+        status = get_spec_status(spec_dir)
+
+        assert status == SpecStatus.REQUIREMENTS_DRAFT
+
+
+class TestExtractGuardrailMatrixEdgeCases:
+    """Edge case tests for extract_guardrail_matrix."""
+
+    def test_handles_guardrail_without_id_prefix(self):
+        """Test handling guardrail rows without ID prefix."""
+        content = """## Guardrail Coverage Matrix
+
+| Guardrail | Requirements | Design | Tasks/Tests | Owner | Status |
+|-----------|--------------|--------|-------------|-------|--------|
+| Testing Coverage | [US-1] | [S1] | [T-1] | Dev | TODO |
+"""
+        matrix = extract_guardrail_matrix(content)
+
+        assert len(matrix) == 1
+        assert matrix[0].guardrail_id == 0  # No ID prefix found
+        assert matrix[0].guardrail_name == "Testing Coverage"
+
+
+class TestExtractTasksEdgeCases:
+    """Edge case tests for extract_tasks."""
+
+    def test_detects_complete_from_keyword_without_checkboxes(self):
+        """Test that COMPLETE/DONE keyword marks task complete."""
+        content = """## Tasks
+
+### Task 1.1: Done task
+COMPLETE - This task is done.
+
+### Task 1.2: Finished task
+DONE
+"""
+        tasks = extract_tasks(content)
+
+        assert len(tasks) == 2
+        assert tasks[0].status == "complete"
+        assert tasks[1].status == "complete"
+
+    def test_detects_in_progress_from_keyword(self):
+        """Test that IN_PROGRESS/STARTED keyword marks task in progress."""
+        content = """## Tasks
+
+### Task 1.1: Working task
+IN PROGRESS
+
+### Task 1.2: Started task
+STARTED
+"""
+        tasks = extract_tasks(content)
+
+        assert len(tasks) == 2
+        assert tasks[0].status == "in_progress"
+        assert tasks[1].status == "in_progress"
+
+
+class TestApprovalDetection:
+    """Tests for approval status detection in spec parsing."""
+
+    def test_detects_requirements_approval_checkbox(self, tmp_path: Path):
+        """Test detection of requirements approval via checkbox format."""
+        spec_dir = tmp_path / "approved-req-spec"
+        spec_dir.mkdir()
+        (spec_dir / "requirements.md").write_text("""# Requirements
+
+## Question-Pack Answers
+Answers here.
+
+## Guardrail Coverage Matrix
+
+| Guardrail | Requirements | Design | Tasks/Tests | Owner | Status |
+|-----------|--------------|--------|-------------|-------|--------|
+| 1. Testing | [US-1] | [S1] | [T-1] | Dev | TODO |
+
+## Approval
+- [x] Requirements approved
+""")
+
+        spec_info = parse_spec(spec_dir)
+
+        assert spec_info.requirements_approved is True
+        assert spec_info.status == SpecStatus.REQUIREMENTS_APPROVED
+
+    def test_detects_design_approval_checkbox(self, tmp_path: Path):
+        """Test detection of design approval via checkbox format."""
+        spec_dir = tmp_path / "approved-design-spec"
+        spec_dir.mkdir()
+        (spec_dir / "requirements.md").write_text("""# Requirements
+
+## Question-Pack Answers
+Answers.
+
+## Guardrail Coverage Matrix
+| Guardrail | Requirements | Design | Tasks/Tests | Owner | Status |
+|-----------|--------------|--------|-------------|-------|--------|
+| 1. Testing | [US-1] | [S1] | [T-1] | Dev | TODO |
+
+Status: Approved
+""")
+        (spec_dir / "design.md").write_text("""# Design
+
+## Guardrail Mapping
+Mapping here.
+
+## Approval
+- [x] Design approved
+""")
+
+        spec_info = parse_spec(spec_dir)
+
+        assert spec_info.design_approved is True
+
+    def test_detects_tasks_approval_checkbox(self, tmp_path: Path):
+        """Test detection of tasks approval via checkbox format."""
+        spec_dir = tmp_path / "approved-tasks-spec"
+        spec_dir.mkdir()
+        (spec_dir / "requirements.md").write_text("""# Requirements
+
+## Question-Pack Answers
+Answers.
+
+## Guardrail Coverage Matrix
+| Guardrail | Requirements | Design | Tasks/Tests | Owner | Status |
+|-----------|--------------|--------|-------------|-------|--------|
+| 1. Testing | [US-1] | [S1] | [T-1] | Dev | TODO |
+
+Status: Approved
+""")
+        (spec_dir / "design.md").write_text("""# Design
+
+## Guardrail Mapping
+Mapping.
+
+Status: Approved
+""")
+        (spec_dir / "tasks.md").write_text("""# Tasks
+
+## Per-Task Guardrail Checklist
+Checklist here.
+
+### Task 1.1: Do something
+- [ ] Step one
+
+## Approval
+- [x] Tasks approved
+""")
+
+        spec_info = parse_spec(spec_dir)
+
+        assert spec_info.tasks_approved is True
+
+
+class TestDetermineStatus:
+    """Tests for _determine_status function."""
+
+    def test_requirements_approved_no_design(self):
+        """Test REQUIREMENTS_APPROVED when no design exists."""
+        info = SpecInfo(
+            name="test",
+            status=SpecStatus.NOT_STARTED,
+            has_requirements=True,
+            requirements_approved=True,
+            has_design=False,
+        )
+
+        status = _determine_status(info)
+
+        assert status == SpecStatus.REQUIREMENTS_APPROVED
+
+    def test_design_draft(self):
+        """Test DESIGN_DRAFT when design not approved."""
+        info = SpecInfo(
+            name="test",
+            status=SpecStatus.NOT_STARTED,
+            has_requirements=True,
+            requirements_approved=True,
+            has_design=True,
+            design_approved=False,
+        )
+
+        status = _determine_status(info)
+
+        assert status == SpecStatus.DESIGN_DRAFT
+
+    def test_design_approved_no_tasks(self):
+        """Test DESIGN_APPROVED when no tasks exist."""
+        info = SpecInfo(
+            name="test",
+            status=SpecStatus.NOT_STARTED,
+            has_requirements=True,
+            requirements_approved=True,
+            has_design=True,
+            design_approved=True,
+            has_tasks=False,
+        )
+
+        status = _determine_status(info)
+
+        assert status == SpecStatus.DESIGN_APPROVED
+
+    def test_tasks_draft(self):
+        """Test TASKS_DRAFT when tasks not approved."""
+        info = SpecInfo(
+            name="test",
+            status=SpecStatus.NOT_STARTED,
+            has_requirements=True,
+            requirements_approved=True,
+            has_design=True,
+            design_approved=True,
+            has_tasks=True,
+            tasks_approved=False,
+        )
+
+        status = _determine_status(info)
+
+        assert status == SpecStatus.TASKS_DRAFT
+
+    def test_tasks_approved_no_tasks_list(self):
+        """Test TASKS_APPROVED when approved but no tasks in list."""
+        info = SpecInfo(
+            name="test",
+            status=SpecStatus.NOT_STARTED,
+            has_requirements=True,
+            requirements_approved=True,
+            has_design=True,
+            design_approved=True,
+            has_tasks=True,
+            tasks_approved=True,
+            tasks=[],
+        )
+
+        status = _determine_status(info)
+
+        assert status == SpecStatus.TASKS_APPROVED
+
+    def test_in_progress_some_tasks_complete(self):
+        """Test IN_PROGRESS when some tasks are complete."""
+        from ldf.utils.spec_parser import TaskItem
+
+        info = SpecInfo(
+            name="test",
+            status=SpecStatus.NOT_STARTED,
+            has_requirements=True,
+            requirements_approved=True,
+            has_design=True,
+            design_approved=True,
+            has_tasks=True,
+            tasks_approved=True,
+            tasks=[
+                TaskItem(id="1.1", title="Task 1", status="complete"),
+                TaskItem(id="1.2", title="Task 2", status="pending"),
+            ],
+        )
+
+        status = _determine_status(info)
+
+        assert status == SpecStatus.IN_PROGRESS
+
+    def test_complete_all_tasks_done(self):
+        """Test COMPLETE when all tasks are complete."""
+        from ldf.utils.spec_parser import TaskItem
+
+        info = SpecInfo(
+            name="test",
+            status=SpecStatus.NOT_STARTED,
+            has_requirements=True,
+            requirements_approved=True,
+            has_design=True,
+            design_approved=True,
+            has_tasks=True,
+            tasks_approved=True,
+            tasks=[
+                TaskItem(id="1.1", title="Task 1", status="complete"),
+                TaskItem(id="1.2", title="Task 2", status="complete"),
+            ],
+        )
+
+        status = _determine_status(info)
+
+        assert status == SpecStatus.COMPLETE
