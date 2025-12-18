@@ -12,8 +12,8 @@ from ldf.utils.config import load_config, save_config
 # Marker to identify LDF-managed hooks
 LDF_HOOK_MARKER = "# LDF Pre-Commit Hook - Auto-generated"
 
-# Framework paths (relative to package)
-FRAMEWORK_DIR = Path(__file__).parent.parent.parent / "framework"
+# Framework paths (inside ldf package)
+FRAMEWORK_DIR = Path(__file__).parent.parent / "_framework"
 PRE_COMMIT_TEMPLATE_PATH = FRAMEWORK_DIR / "hooks" / "pre-commit.sh.j2"
 
 

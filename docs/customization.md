@@ -36,10 +36,13 @@ framework/guardrails/
 
 ### Guardrail Structure
 
+Custom guardrails are added under the `custom:` key in `.ldf/guardrails.yaml`:
+
 ```yaml
 # .ldf/guardrails.yaml
-version: "1.0"
-guardrails:
+preset: saas                        # Optional: extend a preset (saas, fintech, healthcare, api-only)
+
+custom:
   - id: 9                           # Unique ID (start at 9 for custom)
     name: "Audit Logging"           # Display name
     description: "All mutations must be logged to audit table"
@@ -65,10 +68,10 @@ guardrails:
 
 ```yaml
 # .ldf/guardrails.yaml
-version: "1.0"
-extends: core                       # Include core guardrails
-guardrails:
-  # Add custom guardrails
+preset: saas                        # Optional: load a preset's guardrails
+
+custom:
+  # Add custom guardrails (core guardrails are always loaded)
   - id: 9
     name: "Rate Limiting"
     description: "All public endpoints must have rate limiting"
@@ -88,13 +91,20 @@ The guardrail coverage matrix in requirements.md should include all active guard
 
 ### Disabling Core Guardrails
 
+Use the `disabled:` list or `overrides:` section:
+
 ```yaml
 # .ldf/guardrails.yaml
-version: "1.0"
-extends: core
+
+# Option 1: Disable by ID or name
+disabled:
+  - 8                               # Documentation guardrail (by ID)
+  - "Documentation"                 # Or by name
+
+# Option 2: Override with enabled: false
 overrides:
-  - id: 8                           # Documentation guardrail
-    enabled: false                  # Disable for this project
+  "8":                              # Guardrail ID as string key
+    enabled: false
 ```
 
 ---

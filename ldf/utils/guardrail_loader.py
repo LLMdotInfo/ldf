@@ -38,7 +38,7 @@ class Guardrail:
 
 
 # Framework paths
-FRAMEWORK_DIR = Path(__file__).parent.parent.parent / "framework"
+FRAMEWORK_DIR = Path(__file__).parent.parent / "_framework"
 CORE_GUARDRAILS_PATH = FRAMEWORK_DIR / "guardrails" / "core.yaml"
 PRESETS_DIR = FRAMEWORK_DIR / "guardrails" / "presets"
 

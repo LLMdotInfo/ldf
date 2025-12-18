@@ -346,6 +346,13 @@ def audit(
     """
     from ldf.audit import run_audit
 
+    # Warn if --spec is used with --import (--spec is ignored for imports)
+    if import_file and spec_name:
+        console.print(
+            "[yellow]Warning: --spec is ignored when using --import. "
+            "The spec is determined from the import file.[/yellow]"
+        )
+
     # Normalize security-check to security
     if audit_type == "security-check":
         audit_type = "security"
@@ -420,7 +427,7 @@ def mcp_config(root: Path | None, server: tuple, output_format: str):
 
 @main.command()
 @click.option("--service", "-s", help="Service name for service-specific coverage")
-@click.option("--guardrail", "-g", type=int, help="Guardrail ID for guardrail-specific coverage")
+@click.option("--guardrail", "-g", type=int, help="Show coverage info for a specific guardrail (informational)")
 @click.option("--validate", is_flag=True, help="Exit with error code if coverage below threshold (for CI)")
 @click.option("--verbose", "-v", is_flag=True, help="Show detailed per-file coverage breakdown")
 def coverage(service: str | None, guardrail: int | None, validate: bool, verbose: bool):

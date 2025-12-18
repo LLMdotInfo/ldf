@@ -143,11 +143,19 @@ mcp-servers/
 ### `.ldf/config.yaml`
 
 ```yaml
-# Framework version for update tracking
+version: "1.0"
 framework_version: "0.1.0"
+framework_updated: "2024-01-15T10:30:00Z"
 
-# Selected preset during init
-preset: saas
+# Project metadata
+project:
+  name: "my-project"
+  specs_dir: .ldf/specs
+
+# Guardrails configuration
+guardrails:
+  preset: saas
+  overrides: {}
 
 # Question packs copied during init
 question_packs:
@@ -161,19 +169,19 @@ mcp_servers:
   - spec-inspector
   - coverage-reporter
 
-# Checksums for update tracking (auto-generated)
-checksums:
-  question-packs/security.yaml: "abc123..."
-  question-packs/testing.yaml: "def456..."
-
 # API configuration for automated audits (optional)
 audit_api:
   chatgpt:
-    api_key: ${OPENAI_API_KEY}
-    model: gpt-4
+    provider: openai
+    model: gpt-4o
   gemini:
-    api_key: ${GOOGLE_API_KEY}
+    provider: google
     model: gemini-pro
+
+# Checksums for update tracking (auto-generated, prefixed with _)
+_checksums:
+  question-packs/security.yaml: "abc123..."
+  question-packs/testing.yaml: "def456..."
 ```
 
 ## Testing Patterns

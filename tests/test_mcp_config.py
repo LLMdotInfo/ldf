@@ -5,27 +5,27 @@ from pathlib import Path
 
 import pytest
 
-from ldf.mcp_config import get_ldf_installation_path, generate_mcp_config
+from ldf.mcp_config import get_mcp_servers_dir, generate_mcp_config
 
 
-class TestGetLdfInstallationPath:
-    """Tests for get_ldf_installation_path function."""
+class TestGetMcpServersDir:
+    """Tests for get_mcp_servers_dir function."""
 
     def test_returns_path(self):
         """Test that it returns a Path object."""
-        path = get_ldf_installation_path()
+        path = get_mcp_servers_dir()
         assert isinstance(path, Path)
 
-    def test_path_contains_mcp_servers(self):
-        """Test that the path contains the mcp-servers directory."""
-        path = get_ldf_installation_path()
-        mcp_servers = path / "mcp-servers"
-        assert mcp_servers.exists()
+    def test_path_is_mcp_servers_dir(self):
+        """Test that the path is the _mcp_servers directory."""
+        path = get_mcp_servers_dir()
+        assert path.name == "_mcp_servers"
+        assert path.exists()
 
     def test_path_contains_spec_inspector(self):
         """Test that spec-inspector server exists."""
-        path = get_ldf_installation_path()
-        server = path / "mcp-servers" / "spec-inspector" / "server.py"
+        path = get_mcp_servers_dir()
+        server = path / "spec-inspector" / "server.py"
         assert server.exists()
 
 

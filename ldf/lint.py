@@ -147,7 +147,7 @@ def _lint_spec(
         if not filepath.exists():
             if fix:
                 # Create from template
-                template_path = Path(__file__).parent.parent / "framework" / "templates" / filename
+                template_path = Path(__file__).parent / "_framework" / "templates" / filename
                 if template_path.exists():
                     content = template_path.read_text()
                     # Replace placeholder with spec name

@@ -91,6 +91,13 @@ spec-changes:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
 
 # Automated audit (optional - requires OPENAI_API_KEY variable)
+# Prerequisites:
+#   1. Set OPENAI_API_KEY in CI/CD variables
+#   2. Configure .ldf/config.yaml with audit_api section:
+#      audit_api:
+#        chatgpt:
+#          provider: openai
+#          model: gpt-4o
 automated-audit:
   stage: audit
   image: python:${PYTHON_VERSION}
@@ -104,7 +111,7 @@ automated-audit:
         CHANGED_SPECS=$(git diff --name-only origin/$CI_MERGE_REQUEST_TARGET_BRANCH_NAME -- '.ldf/specs/*/requirements.md' | xargs -I{} dirname {} | xargs -I{} basename {})
         for spec in $CHANGED_SPECS; do
           echo "Auditing: $spec"
-          ldf audit --type spec-review --spec $spec --api --output json > audit-$spec.json || true
+          ldf audit --type spec-review --spec $spec --api --agent chatgpt --output json > audit-$spec.json || true
         done
       else
         echo "Skipping automated audit (no spec changes or no API key)"

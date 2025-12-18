@@ -61,6 +61,12 @@ Issues = "https://github.com/LLMdotInfo/ldf/issues"
 where = ["."]
 include = ["ldf*"]
 
+[tool.setuptools.package-data]
+ldf = [
+    "_framework/**/*",
+    "_mcp_servers/**/*",
+]
+
 [tool.black]
 line-length = 100
 target-version = ["py310"]

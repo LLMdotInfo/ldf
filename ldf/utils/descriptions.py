@@ -11,7 +11,7 @@ from typing import Any
 import yaml
 
 # Framework path (relative to package)
-FRAMEWORK_DIR = Path(__file__).parent.parent.parent / "framework"
+FRAMEWORK_DIR = Path(__file__).parent.parent / "_framework"
 DESCRIPTIONS_PATH = FRAMEWORK_DIR / "descriptions.yaml"
 
 

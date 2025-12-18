@@ -63,7 +63,7 @@ This generates an audit request in `audit-request.md` format.
 ldf audit --import audit-response.md --spec user-auth
 ```
 
-This updates the spec with audit findings.
+This saves the audit findings to `.ldf/audit-history/` for tracking.
 
 ### Step 5: Address Issues
 

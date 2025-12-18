@@ -4,15 +4,13 @@ import json
 from pathlib import Path
 
 
-def get_ldf_installation_path() -> Path:
-    """Get the LDF package installation path.
+def get_mcp_servers_dir() -> Path:
+    """Get the MCP servers directory path.
 
     Returns:
-        Path to the LDF package root directory (containing mcp-servers/).
+        Path to the _mcp_servers directory inside the ldf package.
     """
-    # The mcp_config.py file is at ldf/mcp_config.py
-    # LDF root is one level up from that
-    return Path(__file__).parent.parent.resolve()
+    return Path(__file__).parent / "_mcp_servers"
 
 
 def generate_mcp_config(
@@ -34,8 +32,7 @@ def generate_mcp_config(
         project_root = Path.cwd()
     project_root = project_root.resolve()
 
-    ldf_path = get_ldf_installation_path()
-    mcp_servers_dir = ldf_path / "mcp-servers"
+    mcp_servers_dir = get_mcp_servers_dir()
 
     # Available servers
     available_servers = {

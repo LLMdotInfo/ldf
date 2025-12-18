@@ -60,8 +60,10 @@ def create_spec(name: str, project_root: Path | None = None) -> bool:
             content = template_path.read_text()
             content = content.replace("{feature-name}", name)
             content = content.replace("{feature}", name)
+            content = content.replace("{Feature Name}", name)
             content = content.replace("{{feature-name}}", name)
             content = content.replace("{{feature}}", name)
+            content = content.replace("{{Feature Name}}", name)
             dest_path.write_text(content)
             console.print(f"[green]✓[/green] Created {template_name}")
         else:

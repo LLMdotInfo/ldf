@@ -121,6 +121,13 @@ jobs:
         run: ldf coverage --validate
 
   # Optional: Automated audit with OpenAI
+  # Prerequisites:
+  #   1. Set OPENAI_API_KEY secret in repository settings
+  #   2. Configure .ldf/config.yaml with audit_api section:
+  #      audit_api:
+  #        chatgpt:
+  #          provider: openai
+  #          model: gpt-4o
   automated-audit:
     name: Automated Spec Audit
     runs-on: ubuntu-latest
@@ -167,7 +174,7 @@ jobs:
         run: |
           for spec in ${{ steps.changed-specs.outputs.specs }}; do
             echo "Auditing: $spec"
-            ldf audit --type spec-review --spec $spec --api --output json > audit-$spec.json || true
+            ldf audit --type spec-review --spec $spec --api --agent chatgpt --output json > audit-$spec.json || true
           done
 
       - name: Upload audit results

@@ -52,7 +52,7 @@ def prompt_project_path() -> Path:
     cwd = Path.cwd()
 
     # Check if we're inside the LDF package directory
-    is_in_ldf = (cwd / "framework").is_dir() and (cwd / "ldf").is_dir()
+    is_in_ldf = (cwd / "ldf" / "_framework").is_dir() and (cwd / "ldf").is_dir()
 
     if is_in_ldf:
         # User is in LDF directory, suggest creating project elsewhere

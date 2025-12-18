@@ -24,7 +24,7 @@ from ldf.utils.console import console
 from ldf.utils.descriptions import get_all_mcp_servers, get_core_packs, is_mcp_server_default
 
 # Framework paths (relative to package)
-FRAMEWORK_DIR = Path(__file__).parent.parent / "framework"
+FRAMEWORK_DIR = Path(__file__).parent / "_framework"
 
 
 def compute_file_checksum(file_path: Path) -> str:
