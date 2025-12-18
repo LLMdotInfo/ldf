@@ -229,7 +229,6 @@ The `ldf lint` command validates answerpacks:
 1. **Directory exists** - Warns if `.ldf/answerpacks/{spec}/` missing
 2. **Files present** - Warns if directory empty
 3. **No placeholders** - Errors if `[TODO`, `[PLACEHOLDER`, or `YOUR_` found
-4. **Critical questions** - Errors if critical question pack has no file
 
 ### Fixing Linter Errors
 
@@ -319,6 +318,6 @@ Search for and replace placeholders:
 grep -r "TODO\|PLACEHOLDER\|YOUR_" .ldf/answerpacks/
 ```
 
-### "Critical question pack missing"
+### "Answerpacks directory exists but contains no YAML files"
 
-Create the missing answerpack file. Core packs (security, testing, api-design, data-model) should always have answers for features that touch those areas.
+Create answerpack files for the relevant question packs. Core packs (security, testing, api-design, data-model) should have answers for features that touch those areas.

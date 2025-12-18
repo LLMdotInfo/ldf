@@ -284,6 +284,97 @@ class TestFilterByServiceAdvanced:
         assert result["totals"]["percent"] == 80.0
 
 
+class TestCoverageValidateFlag:
+    """Tests for --validate flag."""
+
+    def test_validate_passes_when_coverage_above_threshold(
+        self, temp_project: Path, sample_pytest_coverage_json: dict, monkeypatch
+    ):
+        """Test validate mode passes when coverage meets threshold."""
+        coverage_file = temp_project / "coverage.json"
+        coverage_file.write_text(json.dumps(sample_pytest_coverage_json))  # 85%
+        monkeypatch.chdir(temp_project)
+
+        result = report_coverage(project_root=temp_project, validate=True)
+
+        assert result["status"] == "PASS"
+        # Validate mode should include validation message
+        assert "validation" not in result.get("error", "")
+
+    def test_validate_fails_when_coverage_below_threshold(
+        self, temp_project: Path, monkeypatch
+    ):
+        """Test validate mode fails when coverage below threshold."""
+        coverage_data = {
+            "totals": {
+                "covered_lines": 500,
+                "num_statements": 1000,
+                "percent_covered": 50.0  # Below 80% threshold
+            },
+            "files": {}
+        }
+        coverage_file = temp_project / "coverage.json"
+        coverage_file.write_text(json.dumps(coverage_data))
+        monkeypatch.chdir(temp_project)
+
+        result = report_coverage(project_root=temp_project, validate=True)
+
+        assert result["status"] == "FAIL"
+
+
+class TestCoverageVerboseFlag:
+    """Tests for --verbose flag."""
+
+    def test_verbose_shows_all_files(
+        self, temp_project: Path, monkeypatch, capsys
+    ):
+        """Test verbose mode shows all files not just bottom 10."""
+        # Create coverage data with many files
+        coverage_data = {
+            "totals": {
+                "covered_lines": 800,
+                "num_statements": 1000,
+                "percent_covered": 80.0
+            },
+            "files": {
+                f"src/module{i}.py": {
+                    "summary": {
+                        "covered_lines": 70,
+                        "num_statements": 100,
+                        "percent_covered": 70.0
+                    }
+                }
+                for i in range(15)
+            }
+        }
+        coverage_file = temp_project / "coverage.json"
+        coverage_file.write_text(json.dumps(coverage_data))
+        monkeypatch.chdir(temp_project)
+
+        result = report_coverage(project_root=temp_project, verbose=True)
+
+        captured = capsys.readouterr()
+        # Verbose should show all 15 files
+        assert "more files" not in captured.out
+
+
+class TestCoverageGuardrailFilter:
+    """Tests for --guardrail filter."""
+
+    def test_guardrail_filter_shows_filter_message(
+        self, temp_project: Path, sample_pytest_coverage_json: dict, monkeypatch, capsys
+    ):
+        """Test that guardrail filter shows appropriate message."""
+        coverage_file = temp_project / "coverage.json"
+        coverage_file.write_text(json.dumps(sample_pytest_coverage_json))
+        monkeypatch.chdir(temp_project)
+
+        result = report_coverage(project_root=temp_project, guardrail_id=1)
+
+        captured = capsys.readouterr()
+        assert "guardrail" in captured.out.lower()
+
+
 class TestGenerateReportAdvanced:
     """Advanced tests for report generation."""
 

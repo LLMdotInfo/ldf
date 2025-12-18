@@ -118,8 +118,8 @@ mcp-servers/
 **How they integrate:**
 
 1. `ldf mcp-config` generates Claude's `.claude/mcp.json`
-2. Config points to server scripts with project path as argument
-3. Servers read from `.ldf/` at runtime
+2. Config points to server scripts with project path via environment variables
+3. Servers read from `.ldf/` at runtime using `LDF_ROOT` and `SPECS_DIR` env vars
 4. Claude calls servers via MCP protocol
 
 **Example generated config:**
@@ -128,7 +128,11 @@ mcp-servers/
   "mcpServers": {
     "spec-inspector": {
       "command": "python",
-      "args": ["/path/to/mcp-servers/spec-inspector/server.py", "--project", "/path/to/project"]
+      "args": ["/path/to/mcp-servers/spec-inspector/server.py"],
+      "env": {
+        "LDF_ROOT": "/path/to/project",
+        "SPECS_DIR": "/path/to/project/.ldf/specs"
+      }
     }
   }
 }

@@ -81,6 +81,7 @@ def run_audit(
     include_secrets: bool = False,
     skip_confirm: bool = False,
     spec_name: str | None = None,
+    output_format: str = "text",
 ) -> None:
     """Run audit request generation or import feedback.
 
@@ -94,25 +95,34 @@ def run_audit(
         include_secrets: Whether to include potentially sensitive content
         skip_confirm: Whether to skip confirmation prompts
         spec_name: Optional specific spec to audit (audits all if not provided)
+        output_format: Output format ("text" or "json")
     """
     if import_file:
         _import_feedback(Path(import_file))
     elif audit_type:
         if use_api and agent:
-            _run_api_audit(audit_type, agent, auto_import, include_secrets, skip_confirm, spec_name)
+            _run_api_audit(audit_type, agent, auto_import, include_secrets, skip_confirm, spec_name, output_format)
         elif use_api:
-            console.print("[red]Error: --api requires --agent (chatgpt or gemini)[/red]")
-            console.print("\nExample:")
-            console.print("  ldf audit --type spec-review --api --agent chatgpt")
+            if output_format == "json":
+                import json
+                print(json.dumps({"error": "--api requires --agent (chatgpt or gemini)"}, indent=2))
+            else:
+                console.print("[red]Error: --api requires --agent (chatgpt or gemini)[/red]")
+                console.print("\nExample:")
+                console.print("  ldf audit --type spec-review --api --agent chatgpt")
         else:
             _generate_audit_request(audit_type, include_secrets, skip_confirm, spec_name)
     else:
-        console.print("[red]Error: Specify --type or --import[/red]")
-        console.print("\nExamples:")
-        console.print("  ldf audit --type spec-review")
-        console.print("  ldf audit --type gap-analysis --spec user-auth")
-        console.print("  ldf audit --type security --api --agent chatgpt")
-        console.print("  ldf audit --import feedback.md")
+        if output_format == "json":
+            import json
+            print(json.dumps({"error": "Specify --type or --import"}, indent=2))
+        else:
+            console.print("[red]Error: Specify --type or --import[/red]")
+            console.print("\nExamples:")
+            console.print("  ldf audit --type spec-review")
+            console.print("  ldf audit --type gap-analysis --spec user-auth")
+            console.print("  ldf audit --type security --api --agent chatgpt")
+            console.print("  ldf audit --import feedback.md")
 
 
 def _run_api_audit(
@@ -122,6 +132,7 @@ def _run_api_audit(
     include_secrets: bool,
     skip_confirm: bool,
     spec_name: str | None,
+    output_format: str = "text",
 ) -> None:
     """Run an API-based audit using ChatGPT or Gemini.
 
@@ -132,25 +143,33 @@ def _run_api_audit(
         include_secrets: Whether to include sensitive content
         skip_confirm: Whether to skip confirmation prompts
         spec_name: Optional specific spec to audit
+        output_format: Output format ("text" or "json")
     """
     import asyncio
+    import json
 
     from ldf.audit_api import run_api_audit, save_audit_response, load_api_config
 
     # Check if API is configured
     configs = load_api_config()
     if agent not in configs:
-        console.print(f"[red]Error: {agent} not configured in .ldf/config.yaml[/red]")
-        console.print("\nAdd the following to .ldf/config.yaml:")
-        if agent == "chatgpt":
-            console.print("""
+        if output_format == "json":
+            print(json.dumps({
+                "error": f"{agent} not configured in .ldf/config.yaml",
+                "help": f"Add audit_api.{agent} section to .ldf/config.yaml"
+            }, indent=2))
+        else:
+            console.print(f"[red]Error: {agent} not configured in .ldf/config.yaml[/red]")
+            console.print("\nAdd the following to .ldf/config.yaml:")
+            if agent == "chatgpt":
+                console.print("""
 audit_api:
   chatgpt:
     api_key: ${OPENAI_API_KEY}
     model: gpt-4
 """)
-        else:
-            console.print("""
+            else:
+                console.print("""
 audit_api:
   gemini:
     api_key: ${GOOGLE_API_KEY}
@@ -164,7 +183,8 @@ audit_api:
             "spec-review", "security", "gap-analysis",
             "edge-cases", "architecture"
         ]
-        console.print(f"[bold]Running full audit ({len(audit_types)} types)...[/bold]")
+        if output_format != "json":
+            console.print(f"[bold]Running full audit ({len(audit_types)} types)...[/bold]")
     else:
         audit_types = [audit_type]
 
@@ -180,29 +200,68 @@ audit_api:
         response = asyncio.run(run_api_audit(agent, atype, prompt, spec_name))
         all_responses.append(response)
 
-        if response.success:
-            # Save the response
-            saved_path = save_audit_response(response)
-            console.print(f"[green]Saved: {saved_path}[/green]")
+        if output_format != "json":
+            if response.success:
+                # Save the response
+                saved_path = save_audit_response(response)
+                console.print(f"[green]Saved: {saved_path}[/green]")
 
-            if auto_import:
-                # Display the feedback
-                console.print("\n[bold]Audit Response:[/bold]")
-                console.print(Markdown(response.content))
+                if auto_import:
+                    # Display the feedback (same as --import)
+                    console.print("\n[bold]Audit Response:[/bold]")
+                    console.print(Markdown(response.content))
+
+                    # Provide next steps guidance
+                    console.print(f"\n[green]Feedback auto-imported to: {saved_path}[/green]")
+                    console.print("\nNext steps:")
+                    console.print("  1. Review the findings above")
+                    console.print("  2. Update specs to address critical issues")
+                    console.print("  3. Run 'ldf lint' to validate changes")
+            else:
+                console.print(f"[red]Audit failed for {atype}[/red]")
+                for error in response.errors:
+                    console.print(f"  [red]-[/red] {error}")
         else:
-            console.print(f"[red]Audit failed for {atype}[/red]")
-            for error in response.errors:
-                console.print(f"  [red]-[/red] {error}")
+            # Still save responses in JSON mode
+            if response.success:
+                save_audit_response(response)
 
-    # Summary
-    successful = sum(1 for r in all_responses if r.success)
-    console.print(f"\n[bold]Audit complete:[/bold] {successful}/{len(all_responses)} successful")
+    # Output JSON if requested
+    if output_format == "json":
+        json_output = {
+            "audit_type": audit_type,
+            "spec_name": spec_name,
+            "provider": agent,
+            "results": [
+                {
+                    "audit_type": r.audit_type,
+                    "success": r.success,
+                    "provider": r.provider,
+                    "spec_name": r.spec_name,
+                    "content": r.content,
+                    "timestamp": r.timestamp,
+                    "errors": r.errors,
+                    "usage": r.usage,
+                }
+                for r in all_responses
+            ],
+            "summary": {
+                "total": len(all_responses),
+                "successful": sum(1 for r in all_responses if r.success),
+                "failed": sum(1 for r in all_responses if not r.success),
+            }
+        }
+        print(json.dumps(json_output, indent=2))
+    else:
+        # Summary
+        successful = sum(1 for r in all_responses if r.success)
+        console.print(f"\n[bold]Audit complete:[/bold] {successful}/{len(all_responses)} successful")
 
-    if successful > 0:
-        console.print("\nNext steps:")
-        console.print("  1. Review the audit responses in .ldf/audit-history/")
-        console.print("  2. Address critical issues in your specs")
-        console.print("  3. Run 'ldf lint' to validate changes")
+        if successful > 0:
+            console.print("\nNext steps:")
+            console.print("  1. Review the audit responses in .ldf/audit-history/")
+            console.print("  2. Address critical issues in your specs")
+            console.print("  3. Run 'ldf lint' to validate changes")
 
 
 def _build_audit_prompt_for_api(

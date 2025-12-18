@@ -311,6 +311,90 @@ class TestLintAutoFix:
         # Should succeed or at least not crash
         assert result in (0, 1)
 
+    def test_fix_creates_missing_files_from_templates(self, temp_project: Path, monkeypatch):
+        """Test that --fix creates missing files from templates."""
+        # Create a spec with only requirements.md
+        spec_dir = temp_project / ".ldf" / "specs" / "incomplete"
+        spec_dir.mkdir(parents=True)
+
+        (spec_dir / "requirements.md").write_text("""# incomplete - Requirements
+
+## Overview
+
+Test.
+
+## Question-Pack Answers
+
+Answers.
+
+## Guardrail Coverage Matrix
+
+| Guardrail | Requirements | Design | Tasks/Tests | Owner | Status |
+|-----------|--------------|--------|-------------|-------|--------|
+| 1. Testing | [US-1] | [S1] | [T-1] | Dev | TODO |
+""")
+
+        monkeypatch.chdir(temp_project)
+
+        # First lint should fail due to missing files
+        result_before = lint_specs(spec_name="incomplete", lint_all=False, fix=False)
+        assert result_before == 1
+
+        # Verify design.md and tasks.md don't exist
+        assert not (spec_dir / "design.md").exists()
+        assert not (spec_dir / "tasks.md").exists()
+
+        # Run lint with --fix
+        lint_specs(spec_name="incomplete", lint_all=False, fix=True)
+
+        # Verify files were created
+        assert (spec_dir / "design.md").exists()
+        assert (spec_dir / "tasks.md").exists()
+
+        # Verify created files have content
+        assert len((spec_dir / "design.md").read_text()) > 0
+        assert len((spec_dir / "tasks.md").read_text()) > 0
+
+    def test_fix_removes_trailing_whitespace(self, temp_project: Path, monkeypatch):
+        """Test that --fix removes trailing whitespace from files."""
+        spec_dir = temp_project / ".ldf" / "specs" / "whitespace"
+        spec_dir.mkdir(parents=True)
+
+        # Create files with trailing whitespace
+        (spec_dir / "requirements.md").write_text("""# Requirements
+
+## Question-Pack Answers
+
+Answers.
+
+## Guardrail Coverage Matrix
+
+| Guardrail | Requirements | Design | Tasks/Tests | Owner | Status |
+|-----------|--------------|--------|-------------|-------|--------|
+| 1. Testing | [US-1] | [S1] | [T-1] | Dev | TODO |
+""")
+        (spec_dir / "design.md").write_text("# Design   \n\n## API   \n\nTest   ")
+        (spec_dir / "tasks.md").write_text("""# Tasks
+
+## Per-Task Guardrail Checklist
+
+Checklist.
+
+### Task 1.1: Test
+- [ ] Item
+""")
+
+        monkeypatch.chdir(temp_project)
+
+        # Run lint with --fix
+        lint_specs(spec_name="whitespace", lint_all=False, fix=True)
+
+        # Verify trailing whitespace was removed
+        design_content = (spec_dir / "design.md").read_text()
+        # No line should end with spaces
+        for line in design_content.split('\n'):
+            assert not line.endswith(' '), f"Line still has trailing whitespace: '{line}'"
+
 
 class TestLintStrictMode:
     """Tests for strict mode."""

@@ -134,24 +134,65 @@ def _lint_spec(
     """
     errors = []
     warnings = []
+    fixed_count = 0
     spec_name = spec_path.name
 
     if not ci_mode:
         console.print(f"\n[bold]Linting: {spec_name}[/bold]")
 
-    # Parse the spec
+    # Check required files exist (and fix if requested)
+    required_files = ["requirements.md", "design.md", "tasks.md"]
+    for filename in required_files:
+        filepath = spec_path / filename
+        if not filepath.exists():
+            if fix:
+                # Create from template
+                template_path = Path(__file__).parent.parent / "framework" / "templates" / filename
+                if template_path.exists():
+                    content = template_path.read_text()
+                    # Replace placeholder with spec name
+                    content = content.replace("{feature-name}", spec_name)
+                    content = content.replace("{{feature-name}}", spec_name)
+                    filepath.write_text(content)
+                    fixed_count += 1
+                    if not ci_mode:
+                        console.print(f"  [green]FIXED[/green] Created missing {filename}")
+                else:
+                    errors.append(f"Missing file: {filename}")
+            else:
+                errors.append(f"Missing file: {filename}")
+
+    # Parse the spec (re-parse after potential fixes)
     spec_info = parse_spec(spec_path)
 
     # Add parser errors/warnings
     errors.extend(spec_info.errors)
     warnings.extend(spec_info.warnings)
 
-    # Check required files exist
-    required_files = ["requirements.md", "design.md", "tasks.md"]
-    for filename in required_files:
-        filepath = spec_path / filename
-        if not filepath.exists():
-            errors.append(f"Missing file: {filename}")
+    # Fix trailing whitespace and missing final newlines
+    if fix:
+        for filename in required_files:
+            filepath = spec_path / filename
+            if filepath.exists():
+                content = filepath.read_text()
+                original = content
+
+                # Remove trailing whitespace from each line
+                lines = content.split('\n')
+                lines = [line.rstrip() for line in lines]
+                content = '\n'.join(lines)
+
+                # Ensure file ends with exactly one newline
+                content = content.rstrip('\n') + '\n'
+
+                if content != original:
+                    filepath.write_text(content)
+                    fixed_count += 1
+                    if not ci_mode:
+                        console.print(f"  [green]FIXED[/green] Cleaned whitespace in {filename}")
+
+    if fix and fixed_count > 0 and not ci_mode:
+        console.print(f"  [dim]Fixed {fixed_count} issue(s)[/dim]")
 
     # Validate requirements.md
     requirements_path = spec_path / "requirements.md"

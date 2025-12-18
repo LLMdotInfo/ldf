@@ -19,6 +19,8 @@ def report_coverage(
     service: str | None = None,
     guardrail_id: int | None = None,
     project_root: Path | None = None,
+    validate: bool = False,
+    verbose: bool = False,
 ) -> dict[str, Any]:
     """Report test coverage against guardrail requirements.
 
@@ -26,6 +28,8 @@ def report_coverage(
         service: Service name for service-specific coverage
         guardrail_id: Guardrail ID for guardrail-specific coverage
         project_root: Project root directory
+        validate: If True, return FAIL status when below threshold (for CI)
+        verbose: If True, show detailed per-file breakdown
 
     Returns:
         Coverage report dictionary
@@ -58,6 +62,14 @@ def report_coverage(
             critical_threshold = g.config.get("critical_paths_threshold", 90)
             break
 
+    # Filter to specific guardrail if requested
+    if guardrail_id is not None:
+        guardrail = get_guardrail_by_id(guardrail_id, project_root)
+        if guardrail:
+            console.print(f"[dim]Filtering to guardrail #{guardrail_id}: {guardrail.name}[/dim]\n")
+        else:
+            console.print(f"[yellow]Warning: Guardrail #{guardrail_id} not found[/yellow]\n")
+
     console.print(Panel.fit(
         f"[bold blue]LDF Coverage Report[/bold blue]\n"
         f"Default threshold: {default_threshold}%\n"
@@ -89,7 +101,14 @@ def report_coverage(
     report = _generate_report(coverage_data, default_threshold, critical_threshold, guardrail_id)
 
     # Display report
-    _display_report(report)
+    _display_report(report, verbose=verbose)
+
+    # Validation message for CI mode
+    if validate:
+        if report["status"] == "PASS":
+            console.print("\n[green]✓ Coverage validation passed[/green]")
+        else:
+            console.print(f"\n[red]✗ Coverage validation failed: {report['coverage_percent']:.1f}% < {default_threshold}%[/red]")
 
     return report
 
@@ -349,11 +368,12 @@ def _generate_report(
     return report
 
 
-def _display_report(report: dict[str, Any]) -> None:
+def _display_report(report: dict[str, Any], verbose: bool = False) -> None:
     """Display coverage report.
 
     Args:
         report: Coverage report dictionary
+        verbose: If True, show all files instead of just lowest 10
     """
     console.print()
 
@@ -368,17 +388,19 @@ def _display_report(report: dict[str, Any]) -> None:
 
     console.print(f"Lines: {report['lines_covered']}/{report['lines_total']}")
 
-    # Files table (show lowest coverage files)
+    # Files table (show lowest coverage files, or all files in verbose mode)
     if report["files"]:
         console.print()
-        table = Table(title="Files by Coverage", show_header=True, header_style="bold")
+        title = "All Files by Coverage" if verbose else "Files by Coverage (Lowest 10)"
+        table = Table(title=title, show_header=True, header_style="bold")
         table.add_column("File", style="cyan")
         table.add_column("Coverage", justify="right")
         table.add_column("Status")
 
-        # Show bottom 10 files (lowest coverage)
-        for file_info in report["files"][:10]:
-            percent = file_info["percent"]
+        # Show all files in verbose mode, or bottom 10 otherwise
+        files_to_show = report["files"] if verbose else report["files"][:10]
+        for file_info in files_to_show:
+            file_percent = file_info["percent"]
             passes = file_info["passes"]
 
             if passes:
@@ -390,14 +412,14 @@ def _display_report(report: dict[str, Any]) -> None:
 
             table.add_row(
                 file_info["path"],
-                f"[{pct_style}]{percent:.1f}%[/{pct_style}]",
+                f"[{pct_style}]{file_percent:.1f}%[/{pct_style}]",
                 status,
             )
 
         console.print(table)
 
-        if len(report["files"]) > 10:
-            console.print(f"[dim]... and {len(report['files']) - 10} more files[/dim]")
+        if not verbose and len(report["files"]) > 10:
+            console.print(f"[dim]... and {len(report['files']) - 10} more files (use --verbose to show all)[/dim]")
 
     # Guardrail status
     console.print()

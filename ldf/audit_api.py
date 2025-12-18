@@ -94,7 +94,7 @@ class ChatGPTAuditor(BaseAuditor):
                     spec_name=spec_name,
                     content="",
                     timestamp=timestamp,
-                    errors=["OpenAI package not installed. Install with: pip install 'ldf[audit-api]'"],
+                    errors=["OpenAI package not installed. Install with: pip install 'ldf[automation]'"],
                 )
 
             client = openai.AsyncOpenAI(api_key=self.config.api_key)
@@ -191,7 +191,7 @@ class GeminiAuditor(BaseAuditor):
                     spec_name=spec_name,
                     content="",
                     timestamp=timestamp,
-                    errors=["Google Generative AI package not installed. Install with: pip install 'ldf[audit-api]'"],
+                    errors=["Google Generative AI package not installed. Install with: pip install 'ldf[automation]'"],
                 )
 
             genai.configure(api_key=self.config.api_key)

@@ -323,21 +323,35 @@ export function registerCommands(
             fs.mkdirSync(specsDir, { recursive: true });
             fs.mkdirSync(path.join(ldfDir, 'answerpacks'), { recursive: true });
 
-            // Create config.yaml
+            // Create config.yaml with schema matching LDF CLI expectations
+            const projectName = path.basename(workspacePath);
+            const timestamp = new Date().toISOString();
             const configYaml = `# LDF Configuration
 version: "1.0"
+framework_version: "0.1.0"
+framework_updated: "${timestamp}"
 
-specs:
-  directory: specs
+project:
+  name: "${projectName}"
+  specs_dir: .ldf/specs
 
 guardrails:
-  preset: core  # Options: core, saas, fintech, healthcare, api-only
+  preset: custom
+  overrides: {}
 
 question_packs:
   - security
   - testing
   - api-design
   - data-model
+
+mcp_servers:
+  - spec-inspector
+  - coverage-reporter
+
+lint:
+  strict: false
+  auto_fix: false
 `;
             fs.writeFileSync(path.join(ldfDir, 'config.yaml'), configYaml);
 
@@ -470,9 +484,10 @@ async function runLint(workspacePath: string, specName?: string): Promise<void> 
     const terminal = vscode.window.createTerminal('LDF Lint');
     terminal.show();
 
+    // Use --all flag when no specific spec is provided
     const command = specName
         ? `ldf lint ${specName}`
-        : 'ldf lint';
+        : 'ldf lint --all';
 
     terminal.sendText(command);
 }

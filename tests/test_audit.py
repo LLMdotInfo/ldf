@@ -350,3 +350,61 @@ class TestAllAuditTypes:
 
         assert "Component coupling" in content
         assert "Scalability concerns" in content
+
+
+class TestAuditOutputFormat:
+    """Tests for --output format option."""
+
+    def test_json_output_for_error(self, temp_project: Path, monkeypatch, capsys):
+        """Test JSON output format for error cases."""
+        monkeypatch.chdir(temp_project)
+
+        # Run audit without required args - should output JSON error
+        run_audit(
+            audit_type=None,
+            import_file=None,
+            use_api=False,
+            output_format="json"
+        )
+
+        captured = capsys.readouterr()
+        import json
+        output = json.loads(captured.out)
+        assert "error" in output
+
+    def test_json_output_for_api_not_configured(self, temp_project: Path, monkeypatch, capsys):
+        """Test JSON output when API is not configured."""
+        monkeypatch.chdir(temp_project)
+
+        # Run API audit without configuration
+        run_audit(
+            audit_type="spec-review",
+            import_file=None,
+            use_api=True,
+            agent="chatgpt",
+            output_format="json"
+        )
+
+        captured = capsys.readouterr()
+        import json
+        output = json.loads(captured.out)
+        assert "error" in output
+        assert "not configured" in output["error"]
+
+    def test_json_output_for_missing_agent(self, temp_project: Path, monkeypatch, capsys):
+        """Test JSON output when --api used without --agent."""
+        monkeypatch.chdir(temp_project)
+
+        run_audit(
+            audit_type="spec-review",
+            import_file=None,
+            use_api=True,
+            agent=None,
+            output_format="json"
+        )
+
+        captured = capsys.readouterr()
+        import json
+        output = json.loads(captured.out)
+        assert "error" in output
+        assert "agent" in output["error"].lower()

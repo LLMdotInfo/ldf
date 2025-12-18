@@ -1,90 +1,44 @@
 # LDF Multi-Agent Automation Configuration
 #
-# Copy this file to .ldf/config.yaml and fill in your API keys.
-# DO NOT commit config.yaml with real API keys!
+# Add this audit_api section to your existing .ldf/config.yaml
+# Do NOT replace your entire config.yaml - merge this section in.
 #
-# You can use environment variables: ${VAR_NAME}
+# DO NOT commit config.yaml with real API keys!
+# Use environment variables instead: ${VAR_NAME}
 
-automation:
-  # Enable/disable automated audits
-  enabled: true
-
-  # Default agent for audits
-  default_agent: chatgpt
-
+# Add this section to your .ldf/config.yaml:
+audit_api:
   # OpenAI/ChatGPT Configuration
-  openai:
+  chatgpt:
     # API key from environment variable (recommended)
     api_key: ${OPENAI_API_KEY}
-    # Or hardcode (not recommended):
-    # api_key: sk-...
+    # Or hardcode (not recommended): api_key: sk-...
 
     # Model to use
-    model: gpt-4o
-
-    # Alternative models:
-    # model: gpt-4-turbo
-    # model: gpt-3.5-turbo  # Faster, cheaper, less accurate
+    model: gpt-4
+    # Alternative models: gpt-4o, gpt-4-turbo, gpt-3.5-turbo
 
     # Maximum response tokens
-    max_tokens: 4000
+    max_tokens: 4096
 
     # Request timeout in seconds
-    timeout: 60
-
-    # Retry configuration
-    retry:
-      max_attempts: 3
-      backoff_factor: 2
+    timeout: 120
 
   # Google/Gemini Configuration
-  google:
+  gemini:
     # API key from environment variable (recommended)
-    api_key: ${GOOGLE_AI_API_KEY}
+    api_key: ${GOOGLE_API_KEY}
 
     # Model to use
     model: gemini-pro
-
-    # Alternative models:
-    # model: gemini-pro-vision  # For image analysis
+    # Alternative: gemini-pro-vision for image analysis
 
     # Maximum response tokens
-    max_tokens: 4000
+    max_tokens: 4096
 
     # Request timeout in seconds
-    timeout: 60
+    timeout: 120
 
-    # Retry configuration
-    retry:
-      max_attempts: 3
-      backoff_factor: 2
-
-  # Audit behavior settings
-  settings:
-    # Auto-import results into spec after audit
-    auto_import: false
-
-    # Save raw responses for debugging
-    save_raw_responses: true
-
-    # Output directory for audit results
-    output_dir: .ldf/audits
-
-    # Log API calls for debugging
-    debug_logging: false
-
-# Agent-to-audit-type mapping
-# Determines which agent handles which audit type by default
-audit_mapping:
-  spec-review: chatgpt
-  code-audit: chatgpt
-  security-check: chatgpt
-  gap-analysis: gemini
-  edge-cases: gemini
-  architecture: gemini
-
-# Cost tracking (estimated)
-cost_tracking:
-  enabled: true
-  warn_threshold: 10.00  # Warn when monthly cost exceeds this
-  log_file: .ldf/audit-costs.log
+# Example usage:
+#   ldf audit --type spec-review --api --agent chatgpt
+#   ldf audit --type security --api --agent gemini --auto-import

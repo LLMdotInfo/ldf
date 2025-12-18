@@ -282,6 +282,13 @@ def create_spec(name: str):
     is_flag=True,
     help="Skip confirmation prompts",
 )
+@click.option(
+    "--output",
+    "-o",
+    type=click.Choice(["text", "json"]),
+    default="text",
+    help="Output format (json for CI/scripting)",
+)
 def audit(
     audit_type: str | None,
     spec_name: str | None,
@@ -291,6 +298,7 @@ def audit(
     auto_import: bool,
     include_secrets: bool,
     yes: bool,
+    output: str,
 ):
     """Generate audit requests or import feedback from other AI agents.
 
@@ -351,6 +359,7 @@ def audit(
         include_secrets=include_secrets,
         skip_confirm=yes,
         spec_name=spec_name,
+        output_format=output,
     )
 
 
@@ -412,18 +421,27 @@ def mcp_config(root: Path | None, server: tuple, output_format: str):
 @main.command()
 @click.option("--service", "-s", help="Service name for service-specific coverage")
 @click.option("--guardrail", "-g", type=int, help="Guardrail ID for guardrail-specific coverage")
-def coverage(service: str | None, guardrail: int | None):
+@click.option("--validate", is_flag=True, help="Exit with error code if coverage below threshold (for CI)")
+@click.option("--verbose", "-v", is_flag=True, help="Show detailed per-file coverage breakdown")
+def coverage(service: str | None, guardrail: int | None, validate: bool, verbose: bool):
     """Check test coverage against guardrail requirements.
 
     Examples:
         ldf coverage                 # Overall coverage
         ldf coverage --service auth  # Service-specific
         ldf coverage --guardrail 1   # Guardrail-specific (Testing Coverage)
+        ldf coverage --validate      # CI mode - exit 1 if below threshold
+        ldf coverage --verbose       # Show all files, not just lowest 10
     """
     from ldf.coverage import report_coverage
 
-    report = report_coverage(service=service, guardrail_id=guardrail)
-    if report.get("status") in ("FAIL", "ERROR"):
+    report = report_coverage(
+        service=service,
+        guardrail_id=guardrail,
+        validate=validate,
+        verbose=verbose,
+    )
+    if validate and report.get("status") in ("FAIL", "ERROR"):
         raise SystemExit(1)
 
 
