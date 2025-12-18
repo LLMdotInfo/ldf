@@ -162,4 +162,4 @@ MIT License - see LICENSE file for details.
 
 - [LDF Documentation](../docs/)
 - [LDF CLI](../ldf/)
-- [MCP Servers](../mcp-servers/)
+- [MCP Servers](../ldf/_mcp_servers/)

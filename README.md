@@ -246,16 +246,15 @@ See [CI/CD Integration](integrations/ci-cd/README.md) for configuration options.
 ```
 ldf/
 ├── ldf/                        # CLI package (pip install ldf)
-├── framework/
-│   ├── templates/              # Spec templates (requirements, design, tasks)
-│   ├── guardrails/             # Core + preset guardrails
-│   ├── question-packs/         # Domain question templates
-│   ├── macros/                 # Enforcement macros
-│   └── commands/               # AI assistant slash commands
-├── mcp-servers/
-│   ├── spec-inspector/         # Spec status MCP server
-│   ├── coverage-reporter/      # Coverage metrics MCP server
-│   └── db-inspector/           # Database schema MCP server (template)
+│   ├── _framework/             # Bundled framework assets
+│   │   ├── templates/          # Spec templates (requirements, design, tasks)
+│   │   ├── guardrails/         # Core + preset guardrails
+│   │   ├── question-packs/     # Domain question templates
+│   │   └── macros/             # Enforcement macros
+│   └── _mcp_servers/           # MCP server implementations
+│       ├── spec-inspector/     # Spec status MCP server
+│       ├── coverage-reporter/  # Coverage metrics MCP server
+│       └── db-inspector/       # Database schema MCP server (template)
 ├── multi-agent/
 │   ├── prompts/                # ChatGPT & Gemini audit prompts
 │   └── automation/             # Optional API integration

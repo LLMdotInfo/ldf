@@ -48,7 +48,7 @@ Create the MCP config file for your tool:
   "mcpServers": {
     "spec-inspector": {
       "command": "python",
-      "args": ["mcp-servers/spec-inspector/server.py"],
+      "args": ["-m", "ldf._mcp_servers.spec_inspector.server"],
       "env": {
         "LDF_ROOT": ".",
         "SPECS_DIR": ".ldf/specs"
@@ -56,7 +56,7 @@ Create the MCP config file for your tool:
     },
     "coverage-reporter": {
       "command": "python",
-      "args": ["mcp-servers/coverage-reporter/server.py"],
+      "args": ["-m", "ldf._mcp_servers.coverage_reporter.server"],
       "env": {
         "PROJECT_ROOT": "."
       }
@@ -215,7 +215,7 @@ go tool cover -html=coverage.out -o coverage.html
 2. Check MCP SDK: `pip show mcp`
 3. Check logs: Run server directly to see errors:
    ```bash
-   python mcp-servers/spec-inspector/server.py
+   python -m ldf._mcp_servers.spec_inspector.server
    ```
 
 ### No Specs Found
@@ -240,13 +240,13 @@ go tool cover -html=coverage.out -o coverage.html
 
 For projects with PostgreSQL, you can add the db-inspector server:
 
-1. Copy template: `cp -r mcp-servers/db-inspector/template/ mcp-servers/db-inspector/`
+1. Copy the template from `ldf/_mcp_servers/db-inspector/template/` to your project
 2. Configure database connection in the server
 3. Add to `.claude/mcp.json`:
    ```json
    "db-inspector": {
      "command": "python",
-     "args": ["mcp-servers/db-inspector/server.py"],
+     "args": ["-m", "ldf._mcp_servers.db_inspector.server"],
      "env": {
        "DATABASE_URL": "postgresql://user:pass@localhost/db"
      }

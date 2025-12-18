@@ -28,7 +28,7 @@ Or manually add to your MCP settings (e.g., `.claude/mcp.json` for Claude Code):
   "mcpServers": {
     "coverage-reporter": {
       "command": "python",
-      "args": ["/path/to/ldf/mcp-servers/coverage-reporter/server.py"],
+      "args": ["-m", "ldf._mcp_servers.coverage_reporter.server"],
       "env": {
         "PROJECT_ROOT": "/path/to/your/project"
       }

@@ -59,10 +59,10 @@ The CLI is a thin layer using Click that:
 
 ### Framework → Project
 
-When `ldf init` runs, framework files are copied to the project:
+When `ldf init` runs, bundled framework files are copied to the project:
 
 ```
-framework/                         .ldf/ (project)
+ldf/_framework/                    .ldf/ (project)
 ├── templates/           ──copy──▶ templates/
 │   ├── requirements.md            ├── requirements.md
 │   ├── design.md                  ├── design.md
@@ -73,11 +73,9 @@ framework/                         .ldf/ (project)
 ├── question-packs/      ──copy──▶ question-packs/
 │   ├── core/*.yaml                ├── security.yaml
 │   └── domain/*.yaml              ├── testing.yaml
-├── macros/              ──copy──▶ macros/
-│   ├── clarify-first.md           ├── clarify-first.md
-│   └── ...                        └── ...
-└── commands/            ──copy──▶ .claude/commands/
-    └── *.md                       └── *.md
+└── macros/              ──copy──▶ macros/
+    ├── clarify-first.md           ├── clarify-first.md
+    └── ...                        └── ...
 ```
 
 ### Update Flow
@@ -128,7 +126,7 @@ ldf/_mcp_servers/
   "mcpServers": {
     "spec-inspector": {
       "command": "python",
-      "args": ["/path/to/mcp-servers/spec-inspector/server.py"],
+      "args": ["-m", "ldf._mcp_servers.spec_inspector.server"],
       "env": {
         "LDF_ROOT": "/path/to/project",
         "SPECS_DIR": "/path/to/project/.ldf/specs"
@@ -229,17 +227,17 @@ def test_detection(tmp_path):
 
 ### New Framework File
 
-1. Add file to `framework/` directory
+1. Add file to `ldf/_framework/` directory
 2. Update `init.py` to copy it during initialization
 3. Update `update.py` to handle it during updates
 4. Add to `REQUIRED_*` constants in `detection.py` if mandatory
 
 ### New MCP Server
 
-1. Create server directory in `mcp-servers/`
+1. Create server directory in `ldf/_mcp_servers/`
 2. Implement `server.py` with MCP SDK
 3. Add server name to `mcp_config.py` server list
-4. Document in `mcp-servers/README.md`
+4. Document in `ldf/_mcp_servers/README.md`
 
 ## Error Handling
 

@@ -28,7 +28,7 @@ Or manually add to your MCP settings (e.g., `.claude/mcp.json` for Claude Code):
   "mcpServers": {
     "spec-inspector": {
       "command": "python",
-      "args": ["/path/to/ldf/mcp-servers/spec-inspector/server.py"],
+      "args": ["-m", "ldf._mcp_servers.spec_inspector.server"],
       "env": {
         "LDF_ROOT": "/path/to/your/project",
         "SPECS_DIR": ".ldf/specs"

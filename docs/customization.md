@@ -22,10 +22,10 @@ Guardrails are constraints that are validated at every phase of development.
 ├── guardrails.yaml       # Your project's active guardrails
 ```
 
-Or in the framework:
+Or in the bundled framework (installed with the package):
 
 ```
-framework/guardrails/
+ldf/_framework/guardrails/
 ├── core.yaml             # 8 universal guardrails
 └── presets/
     ├── saas.yaml         # SaaS-specific guardrails
@@ -116,7 +116,7 @@ Question-packs are domain-specific questions that must be answered before writin
 ### Location
 
 ```
-framework/question-packs/
+ldf/_framework/question-packs/
 ├── core/                   # Always included
 │   ├── security.yaml
 │   ├── testing.yaml
@@ -132,7 +132,7 @@ framework/question-packs/
 ### Question-Pack Structure
 
 ```yaml
-# framework/question-packs/core/security.yaml
+# ldf/_framework/question-packs/core/security.yaml
 domain: security
 version: "1.0"
 critical: true                      # Must be answered before proceeding
@@ -240,7 +240,7 @@ Presets are bundles of guardrails and question-packs for specific domains.
 ### Creating Custom Presets
 
 ```yaml
-# framework/guardrails/presets/my-preset.yaml
+# ldf/_framework/guardrails/presets/my-preset.yaml
 name: my-preset
 description: "Custom preset for my organization"
 extends: core                       # Start with core guardrails

@@ -42,6 +42,7 @@ dev = [
 ]
 mcp = [
     "mcp>=0.9.0",
+    "coverage>=7.0.0",  # Required by coverage-reporter MCP server
 ]
 automation = [
     "openai>=1.0.0",
