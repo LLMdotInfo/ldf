@@ -64,8 +64,14 @@ include = ["ldf*"]
 
 [tool.setuptools.package-data]
 ldf = [
-    "_framework/**/*",
-    "_mcp_servers/**/*",
+    # Framework assets (yaml configs, markdown templates, jinja2 templates)
+    "_framework/**/*.yaml",
+    "_framework/**/*.md",
+    "_framework/**/*.j2",
+    # MCP servers (python source, docs, requirements)
+    "_mcp_servers/**/*.py",
+    "_mcp_servers/**/*.md",
+    "_mcp_servers/**/*.txt",
 ]
 
 [tool.black]
