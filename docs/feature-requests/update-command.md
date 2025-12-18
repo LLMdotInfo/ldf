@@ -90,23 +90,6 @@ ldf update --only macros
    - If user modified a framework file, show diff and prompt for resolution
    - Option to keep local, take upstream, or merge manually
 
-## Alternative Solutions Considered
-
-### 1. Git Submodule Approach
-- Keep LDF as a git submodule in `.ldf/framework/`
-- Pros: Native git update mechanism
-- Cons: More complex setup, harder for non-git users
-
-### 2. Package Version Pinning
-- Treat LDF purely as a pip package, regenerate files on demand
-- Pros: Simple versioning
-- Cons: Loses customization, requires re-answering question packs
-
-### 3. Template Inheritance
-- User files extend/override framework files rather than copying
-- Pros: Clean separation
-- Cons: Major architectural change, breaks current model
-
 ## Implementation Notes
 
 ### Files to Track
