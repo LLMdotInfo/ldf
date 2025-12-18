@@ -1,6 +1,7 @@
 """LDF CLI - Command line interface for the LLM Development Framework."""
 
 from pathlib import Path
+from typing import Any
 
 import click
 
@@ -71,6 +72,12 @@ def main(ctx, verbose):
     is_flag=True,
     help="Repair incomplete LDF setup without overwriting user files",
 )
+@click.option(
+    "--from",
+    "from_template",
+    type=click.Path(exists=True),
+    help="Initialize from a team template (.ldf/ directory or .zip file)",
+)
 def init(
     path: str | None,
     preset: str | None,
@@ -80,6 +87,7 @@ def init(
     hooks: bool | None,
     force: bool,
     repair: bool,
+    from_template: str | None,
 ):
     """Initialize LDF in a project directory.
 
@@ -105,6 +113,7 @@ def init(
         ldf init --hooks                    # Also install pre-commit hooks
         ldf init --force                    # Reinitialize existing project
         ldf init --repair                   # Fix missing files only
+        ldf init --from ./template.zip      # Initialize from team template
     """
     from pathlib import Path as PathLib
 
@@ -112,6 +121,16 @@ def init(
     from ldf.init import initialize_project, repair_project
 
     project_path = PathLib(path).resolve() if path else Path.cwd()
+
+    # Handle --from template import
+    if from_template:
+        from ldf.template import import_template
+
+        template_path = PathLib(from_template).resolve()
+        success = import_template(template_path, project_path, force=force)
+        if not success:
+            raise SystemExit(1)
+        return
 
     # Smart detection (unless --force is used)
     if not force:
@@ -197,22 +216,39 @@ def init(
     "--format",
     "-F",
     "output_format",
-    type=click.Choice(["rich", "ci"]),
+    type=click.Choice(["rich", "ci", "sarif"]),
     default="rich",
-    help="Output format: rich (default) for terminal, ci for GitHub Actions",
+    help="Output format: rich (default), ci for GitHub Actions, sarif for code scanning",
 )
-def lint(spec_name: str | None, lint_all: bool, fix: bool, output_format: str):
+@click.option(
+    "--output",
+    "-o",
+    "output_file",
+    type=click.Path(),
+    help="Output file for sarif format (default: stdout)",
+)
+def lint(
+    spec_name: str | None,
+    lint_all: bool,
+    fix: bool,
+    output_format: str,
+    output_file: str | None,
+):
     """Validate spec files against guardrail requirements.
 
     Examples:
-        ldf lint --all              # Lint all specs
-        ldf lint user-auth          # Lint single spec
-        ldf lint user-auth --fix    # Lint and auto-fix issues
-        ldf lint --all --format ci  # CI-friendly output for GitHub Actions
+        ldf lint --all                        # Lint all specs
+        ldf lint user-auth                    # Lint single spec
+        ldf lint user-auth --fix              # Lint and auto-fix issues
+        ldf lint --all --format ci            # CI-friendly output for GitHub Actions
+        ldf lint --all --format sarif         # SARIF output for code scanning
+        ldf lint --all --format sarif -o lint.sarif  # Save SARIF to file
     """
     from ldf.lint import lint_specs
 
-    exit_code = lint_specs(spec_name, lint_all, fix, output_format=output_format)
+    exit_code = lint_specs(
+        spec_name, lint_all, fix, output_format=output_format, output_file=output_file
+    )
     raise SystemExit(exit_code)
 
 
@@ -439,24 +475,75 @@ def mcp_config(root: Path | None, server: tuple, output_format: str):
     help="Exit with error code if coverage below threshold (for CI)",
 )
 @click.option("--verbose", "-v", is_flag=True, help="Show detailed per-file breakdown")
-def coverage(service: str | None, guardrail: int | None, validate: bool, verbose: bool):
+@click.option(
+    "--save",
+    "save_name",
+    help="Save current coverage snapshot with given name",
+)
+@click.option(
+    "--diff",
+    "diff_target",
+    help="Compare current coverage with saved snapshot or file path",
+)
+@click.option(
+    "--upload",
+    "upload_dest",
+    help="Upload coverage to destination (artifact, s3://bucket/path, file://path)",
+)
+def coverage(
+    service: str | None,
+    guardrail: int | None,
+    validate: bool,
+    verbose: bool,
+    save_name: str | None,
+    diff_target: str | None,
+    upload_dest: str | None,
+):
     """Check test coverage against guardrail requirements.
 
     Examples:
-        ldf coverage                 # Overall coverage
-        ldf coverage --service auth  # Service-specific
-        ldf coverage --guardrail 1   # Guardrail-specific (Testing Coverage)
-        ldf coverage --validate      # CI mode - exit 1 if below threshold
-        ldf coverage --verbose       # Show all files, not just lowest 10
+        ldf coverage                       # Overall coverage
+        ldf coverage --service auth        # Service-specific
+        ldf coverage --guardrail 1         # Guardrail-specific (Testing Coverage)
+        ldf coverage --validate            # CI mode - exit 1 if below threshold
+        ldf coverage --verbose             # Show all files, not just lowest 10
+        ldf coverage --save baseline       # Save snapshot as 'baseline'
+        ldf coverage --diff baseline       # Compare with saved baseline
+        ldf coverage --diff ./old.json     # Compare with specific file
+        ldf coverage --upload artifact     # Upload to CI artifact
     """
-    from ldf.coverage import report_coverage
+    from ldf.coverage import (
+        compare_coverage,
+        report_coverage,
+        save_coverage_snapshot,
+        upload_coverage,
+    )
 
+    # Handle diff mode
+    if diff_target:
+        result = compare_coverage(diff_target, service=service)
+        if result.get("status") == "ERROR":
+            raise SystemExit(1)
+        return
+
+    # Normal coverage report
     report = report_coverage(
         service=service,
         guardrail_id=guardrail,
         validate=validate,
         verbose=verbose,
     )
+
+    # Handle save mode
+    if save_name and report.get("status") != "ERROR":
+        save_coverage_snapshot(save_name, report)
+
+    # Handle upload mode
+    if upload_dest and report.get("status") != "ERROR":
+        success = upload_coverage(upload_dest, report)
+        if not success:
+            raise SystemExit(1)
+
     if validate and report.get("status") in ("FAIL", "ERROR"):
         raise SystemExit(1)
 
@@ -947,6 +1034,590 @@ def convert_import(file: str, spec_name: str, dry_run: bool):
         console.print(f"  2. Review answerpacks in .ldf/answerpacks/{spec_name}/")
         console.print("  3. Run [cyan]ldf lint[/cyan] to validate the specs")
         console.print("  4. Refine the specs as needed")
+
+
+@main.group("list-framework")
+def list_framework():
+    """List available framework components.
+
+    Shows presets, question packs, guardrails, and MCP servers
+    available in the LDF framework.
+
+    Examples:
+
+        ldf list-framework presets     # List all presets
+        ldf list-framework packs       # List question packs
+        ldf list-framework guardrails  # List guardrails
+        ldf list-framework mcp         # List MCP servers
+    """
+    pass
+
+
+@list_framework.command("presets")
+def list_presets():
+    """List available guardrail presets."""
+    from rich.table import Table
+
+    from ldf.utils.descriptions import get_preset_extra_guardrails, get_preset_short
+
+    presets = ["saas", "fintech", "healthcare", "api-only", "custom"]
+
+    table = Table(title="Available Presets", show_header=True)
+    table.add_column("Preset", style="cyan")
+    table.add_column("Description")
+    table.add_column("Guardrails")
+
+    for preset in presets:
+        short = get_preset_short(preset)
+        extra = get_preset_extra_guardrails(preset)
+        table.add_row(preset, short, extra)
+
+    console.print(table)
+
+
+@list_framework.command("packs")
+def list_packs():
+    """List available question packs."""
+    from rich.table import Table
+
+    from ldf.utils.descriptions import load_descriptions
+
+    descriptions = load_descriptions()
+    packs = descriptions.get("question_packs", {})
+
+    table = Table(title="Available Question Packs", show_header=True)
+    table.add_column("Pack", style="cyan")
+    table.add_column("Description")
+    table.add_column("Type")
+
+    for name, info in sorted(packs.items()):
+        short = info.get("short", "")
+        is_core = info.get("is_core", False)
+        pack_type = "[green]core[/green]" if is_core else "[dim]domain[/dim]"
+        table.add_row(name, short, pack_type)
+
+    console.print(table)
+
+
+@list_framework.command("guardrails")
+def list_guardrails():
+    """List available guardrails by preset."""
+    from rich.table import Table
+
+    from ldf.utils.guardrail_loader import load_core_guardrails, load_preset_guardrails
+
+    # Show core guardrails
+    core = load_core_guardrails()
+    table = Table(title="Core Guardrails (all presets)", show_header=True)
+    table.add_column("ID", style="cyan")
+    table.add_column("Name")
+    table.add_column("Severity")
+
+    for g in core:
+        severity_colors = {
+            "critical": "[red]critical[/red]",
+            "high": "[yellow]high[/yellow]",
+            "medium": "[blue]medium[/blue]",
+            "low": "[dim]low[/dim]",
+        }
+        severity = severity_colors.get(g.severity, g.severity)
+        table.add_row(str(g.id), g.name, severity)
+
+    console.print(table)
+    console.print()
+
+    # Show preset-specific guardrails
+    presets = ["saas", "fintech", "healthcare", "api-only"]
+    for preset in presets:
+        try:
+            preset_guardrails = load_preset_guardrails(preset)
+            if preset_guardrails:
+                table = Table(title=f"Additional Guardrails: {preset}", show_header=True)
+                table.add_column("ID", style="cyan")
+                table.add_column("Name")
+                table.add_column("Severity")
+
+                for g in preset_guardrails:
+                    severity_colors = {
+                        "critical": "[red]critical[/red]",
+                        "high": "[yellow]high[/yellow]",
+                        "medium": "[blue]medium[/blue]",
+                        "low": "[dim]low[/dim]",
+                    }
+                    severity = severity_colors.get(g.severity, g.severity)
+                    table.add_row(str(g.id), g.name, severity)
+
+                console.print(table)
+                console.print()
+        except FileNotFoundError:
+            pass
+
+
+@list_framework.command("mcp")
+def list_mcp():
+    """List available MCP servers."""
+    from rich.table import Table
+
+    from ldf.utils.descriptions import load_descriptions
+
+    descriptions = load_descriptions()
+    servers = descriptions.get("mcp_servers", {})
+
+    table = Table(title="Available MCP Servers", show_header=True)
+    table.add_column("Server", style="cyan")
+    table.add_column("Description")
+    table.add_column("Default")
+
+    for name, info in sorted(servers.items()):
+        short = info.get("short", "")
+        is_default = info.get("default", False)
+        default_str = "[green]yes[/green]" if is_default else "[dim]no[/dim]"
+        table.add_row(name, short, default_str)
+
+    console.print(table)
+
+
+@main.command("mcp-health")
+@click.option("--json", "json_output", is_flag=True, help="Output as JSON")
+def mcp_health(json_output):
+    """Check MCP server health and readiness.
+
+    Verifies that configured MCP servers can access required files
+    and are ready to serve requests.
+
+    Checks:
+        spec-inspector: .ldf/specs/ accessible, guardrails valid
+        coverage-reporter: coverage.json exists and parseable
+        db-inspector: DATABASE_URL configured (if enabled)
+
+    Examples:
+
+        ldf mcp-health           # Check all configured servers
+        ldf mcp-health --json    # JSON output for scripting
+    """
+    import json
+
+    from ldf.mcp_health import print_health_report, run_mcp_health
+
+    report = run_mcp_health(project_root=Path.cwd())
+
+    if json_output:
+        console.print(json.dumps(report.to_dict(), indent=2))
+    else:
+        print_health_report(report)
+
+
+@main.command()
+@click.option("--strict", is_flag=True, help="Treat warnings as errors")
+@click.option("--skip-lint", is_flag=True, help="Skip lint check")
+@click.option("--skip-coverage", is_flag=True, help="Skip coverage check")
+def preflight(strict, skip_lint, skip_coverage):
+    """Run all CI quality checks in sequence.
+
+    Combines config validation, spec linting, and coverage checks
+    into a single command for CI pipelines.
+
+    Exit codes:
+        0: All checks pass
+        1: Lint failures
+        2: Coverage below threshold
+        3: Config/setup issues
+
+    Examples:
+
+        ldf preflight              # Run all checks
+        ldf preflight --strict     # Treat warnings as errors
+        ldf preflight --skip-lint  # Skip lint check
+    """
+    from ldf.doctor import CheckStatus, run_doctor
+
+    console.print("[bold]LDF Preflight Check[/bold]")
+    console.print("━" * 50)
+
+    all_passed = True
+    exit_code = 0
+
+    # Step 1: Config validation (subset of doctor)
+    console.print("\n[bold]1. Config Validation[/bold]")
+    report = run_doctor(project_root=Path.cwd())
+
+    critical_checks = ["Project structure", "Configuration", "Guardrails"]
+    for check in report.checks:
+        if check.name in critical_checks:
+            if check.status == CheckStatus.FAIL:
+                console.print(f"  [red]✗[/red] {check.name}: {check.message}")
+                all_passed = False
+                exit_code = 3
+            elif check.status == CheckStatus.WARN:
+                console.print(f"  [yellow]⚠[/yellow] {check.name}: {check.message}")
+                if strict:
+                    all_passed = False
+                    exit_code = 3
+            else:
+                console.print(f"  [green]✓[/green] {check.name}")
+
+    if exit_code == 3:
+        console.print("\n[red]Preflight failed: Config issues[/red]")
+        raise SystemExit(exit_code)
+
+    # Step 2: Lint specs
+    if not skip_lint:
+        console.print("\n[bold]2. Spec Linting[/bold]")
+        from ldf.lint import lint_specs
+
+        lint_result = lint_specs(
+            spec_name=None,
+            lint_all=True,
+            fix=False,
+            output_format="ci",
+        )
+
+        if lint_result != 0:
+            console.print("  [red]✗[/red] Lint check failed")
+            all_passed = False
+            if exit_code == 0:
+                exit_code = 1
+        else:
+            console.print("  [green]✓[/green] All specs pass lint")
+    else:
+        console.print("\n[bold]2. Spec Linting[/bold] [dim](skipped)[/dim]")
+
+    # Step 3: Coverage validation
+    if not skip_coverage:
+        console.print("\n[bold]3. Coverage Validation[/bold]")
+        from ldf.coverage import report_coverage
+
+        cov_report = report_coverage(validate=True)
+
+        if cov_report.get("status") == "ERROR":
+            err_msg = cov_report.get('error', 'unknown error')
+            console.print(f"  [yellow]⚠[/yellow] Coverage check skipped: {err_msg}")
+            if strict:
+                all_passed = False
+                if exit_code == 0:
+                    exit_code = 2
+        elif cov_report.get("status") == "FAIL":
+            pct = cov_report.get('coverage_percent', 0)
+            console.print(f"  [red]✗[/red] Coverage below threshold: {pct:.1f}%")
+            all_passed = False
+            if exit_code == 0:
+                exit_code = 2
+        else:
+            overall = cov_report.get("overall", 0)
+            console.print(f"  [green]✓[/green] Coverage: {overall:.1f}%")
+    else:
+        console.print("\n[bold]3. Coverage Validation[/bold] [dim](skipped)[/dim]")
+
+    # Summary
+    console.print("\n" + "━" * 50)
+    if all_passed:
+        console.print("[green bold]✓ All preflight checks passed[/green bold]")
+    else:
+        console.print("[red bold]✗ Preflight checks failed[/red bold]")
+        raise SystemExit(exit_code)
+
+
+@main.command()
+@click.option("--fix", is_flag=True, help="Attempt to auto-fix issues")
+@click.option("--json", "json_output", is_flag=True, help="Output as JSON")
+def doctor(fix, json_output):
+    """Diagnose common LDF setup issues.
+
+    Checks project structure, configuration, dependencies, and MCP setup.
+
+    Examples:
+
+        ldf doctor                # Run all checks
+        ldf doctor --fix          # Auto-fix where possible
+        ldf doctor --json         # JSON output for scripting
+    """
+    import json as json_module
+
+    from ldf.doctor import print_report, run_doctor
+
+    report = run_doctor(project_root=Path.cwd(), fix=fix)
+
+    if json_output:
+        console.print(json_module.dumps(report.to_dict(), indent=2))
+    else:
+        print_report(report)
+
+    # Exit with error code if any failures
+    if not report.success:
+        raise SystemExit(1)
+
+
+@main.group()
+def template():
+    """Team template management commands."""
+    pass
+
+
+@template.command("verify")
+@click.argument("template_path", type=click.Path(exists=True))
+@click.option("--json", "json_output", is_flag=True, help="Output as JSON")
+def template_verify(template_path: str, json_output: bool):
+    """Verify a template before publishing.
+
+    Validates that the template follows LDF conventions and doesn't
+    include prohibited content (specs, answerpacks, secrets).
+
+    Examples:
+        ldf template verify ./my-template/          # Verify directory
+        ldf template verify ./company-template.zip  # Verify zip file
+    """
+    import json as json_module
+
+    from ldf.template import print_verify_result, verify_template
+
+    path = Path(template_path)
+    result = verify_template(path)
+
+    if json_output:
+        console.print(json_module.dumps(result.to_dict(), indent=2))
+    else:
+        print_verify_result(result, path)
+
+    if not result.valid:
+        raise SystemExit(1)
+
+
+@main.command("export-docs")
+@click.option(
+    "-o", "--output",
+    "output_file",
+    type=click.Path(),
+    help="Output file (default: stdout)",
+)
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(["markdown"]),
+    default="markdown",
+    help="Output format (default: markdown)",
+)
+def export_docs(output_file: str | None, output_format: str):
+    """Generate framework documentation.
+
+    Exports the project's LDF configuration as readable documentation,
+    including preset info, active guardrails, question packs, and MCP servers.
+
+    Examples:
+        ldf export-docs                    # Output to stdout
+        ldf export-docs -o FRAMEWORK.md    # Write to file
+    """
+    from ldf.docs import export_docs as generate_docs
+
+    project_root = Path.cwd()
+    ldf_dir = project_root / ".ldf"
+
+    if not ldf_dir.exists():
+        console.print("[red]Error: .ldf/ not found. Run 'ldf init' first.[/red]")
+        raise SystemExit(1)
+
+    docs = generate_docs(project_root=project_root, output_format=output_format)
+
+    if output_file:
+        Path(output_file).write_text(docs)
+        console.print(f"[green]✓[/green] Documentation written to: {output_file}")
+    else:
+        console.print(docs)
+
+
+@main.command("add-pack")
+@click.argument("pack_name", required=False)
+@click.option("--list", "list_packs", is_flag=True, help="List available packs")
+@click.option("--all", "add_all", is_flag=True, help="Add all available packs")
+@click.option("--force", is_flag=True, help="Overwrite if pack already exists")
+def add_pack(pack_name: str | None, list_packs: bool, add_all: bool, force: bool):
+    """Add a question pack to the project.
+
+    Question packs contain structured questions that help ensure
+    comprehensive spec coverage for specific domains.
+
+    Examples:
+
+        ldf add-pack --list        # List available packs
+        ldf add-pack security      # Add security pack
+        ldf add-pack billing       # Add billing (domain) pack
+        ldf add-pack --all         # Add all available packs
+        ldf add-pack testing --force  # Replace existing pack
+    """
+    import shutil
+
+    import yaml
+
+    from ldf.init import FRAMEWORK_DIR, compute_file_checksum
+    from ldf.utils.descriptions import (
+        get_core_packs,
+        get_domain_packs,
+        get_pack_short,
+    )
+
+    project_root = Path.cwd()
+    ldf_dir = project_root / ".ldf"
+    qp_dir = ldf_dir / "question-packs"
+    config_path = ldf_dir / "config.yaml"
+    source_dir = FRAMEWORK_DIR / "question-packs"
+
+    # Check LDF is initialized
+    if not ldf_dir.exists():
+        console.print("[red]Error: No .ldf directory found.[/red]")
+        console.print("Run [cyan]ldf init[/cyan] to initialize a project first.")
+        raise SystemExit(1)
+
+    # Get available packs from framework
+    core_packs = get_core_packs()
+    domain_packs = get_domain_packs()
+    all_packs = core_packs + domain_packs
+
+    # Also check filesystem for packs not in descriptions
+    fs_packs: set[str] = set()
+    core_dir = source_dir / "core"
+    domain_dir = source_dir / "domain"
+    if core_dir.exists():
+        fs_packs.update(f.stem for f in core_dir.glob("*.yaml"))
+    if domain_dir.exists():
+        fs_packs.update(f.stem for f in domain_dir.glob("*.yaml"))
+
+    # Combine description-based and filesystem-based packs
+    available_packs = sorted(set(all_packs) | fs_packs)
+
+    # --list mode: show available packs
+    if list_packs:
+        from rich.table import Table
+
+        # Get existing packs in project
+        existing = set()
+        if qp_dir.exists():
+            existing = {f.stem for f in qp_dir.glob("*.yaml")}
+
+        table = Table(title="Available Question Packs", show_header=True)
+        table.add_column("Pack", style="cyan")
+        table.add_column("Description")
+        table.add_column("Type")
+        table.add_column("Status")
+
+        for pack in available_packs:
+            short = get_pack_short(pack)
+            is_core = pack in core_packs
+            pack_type = "[green]core[/green]" if is_core else "[dim]domain[/dim]"
+            status = "[green]added[/green]" if pack in existing else "[dim]available[/dim]"
+            table.add_row(pack, short, pack_type, status)
+
+        console.print(table)
+        return
+
+    # Validate we have a pack name or --all
+    if not pack_name and not add_all:
+        console.print("[red]Error: Specify a pack name or use --all[/red]")
+        console.print()
+        console.print("Usage:")
+        console.print("  ldf add-pack <pack-name>  # Add specific pack")
+        console.print("  ldf add-pack --list       # List available packs")
+        console.print("  ldf add-pack --all        # Add all packs")
+        raise SystemExit(1)
+
+    # Determine packs to add
+    packs_to_add = available_packs if add_all else [pack_name]
+
+    # Validate pack exists
+    for pack in packs_to_add:
+        if pack not in available_packs:
+            console.print(f"[red]Error: Pack '{pack}' not found in framework.[/red]")
+            console.print()
+            console.print("Available packs:")
+            for p in available_packs:
+                console.print(f"  - {p}")
+            raise SystemExit(1)
+
+    # Load existing config
+    config: dict[str, Any] = {}
+    if config_path.exists():
+        try:
+            with open(config_path) as f:
+                config = yaml.safe_load(f) or {}
+        except yaml.YAMLError as e:
+            console.print(f"[red]Error: Invalid config.yaml: {e}[/red]")
+            raise SystemExit(1)
+
+    existing_packs = set(config.get("question_packs", []))
+    checksums = config.get("_checksums", {})
+
+    # Ensure qp_dir exists
+    qp_dir.mkdir(parents=True, exist_ok=True)
+
+    added = []
+    skipped = []
+    replaced = []
+
+    for pack in packs_to_add:
+        dest_path = qp_dir / f"{pack}.yaml"
+
+        # Check if already exists
+        if dest_path.exists() and not force:
+            skipped.append(pack)
+            continue
+
+        # Find source file
+        source_path = source_dir / "core" / f"{pack}.yaml"
+        if not source_path.exists():
+            source_path = source_dir / "domain" / f"{pack}.yaml"
+
+        if not source_path.exists():
+            console.print(f"[yellow]Warning: Pack '{pack}' not found in framework files.[/yellow]")
+            skipped.append(pack)
+            continue
+
+        # Copy the file
+        was_existing = dest_path.exists()
+        shutil.copy(source_path, dest_path)
+
+        # Compute checksum
+        checksum = compute_file_checksum(dest_path)
+        checksums[f"question-packs/{pack}.yaml"] = checksum
+
+        # Track whether added or replaced
+        if was_existing:
+            replaced.append(pack)
+        else:
+            added.append(pack)
+
+    # Update config
+    new_packs = existing_packs | set(added)
+    config["question_packs"] = sorted(new_packs)
+    config["_checksums"] = checksums
+
+    # Write config
+    with open(config_path, "w") as f:
+        yaml.safe_dump(config, f, default_flow_style=False, sort_keys=False)
+
+    # Print summary
+    console.print()
+    if added:
+        console.print(f"[green]✓[/green] Added {len(added)} pack(s):")
+        for pack in added:
+            short = get_pack_short(pack)
+            console.print(f"  - {pack}: {short}")
+
+    if replaced:
+        console.print(f"[yellow]![/yellow] Replaced {len(replaced)} pack(s):")
+        for pack in replaced:
+            console.print(f"  - {pack}")
+
+    if skipped:
+        console.print(f"[dim]○[/dim] Skipped {len(skipped)} pack(s) (already exist):")
+        for pack in skipped:
+            console.print(f"  - {pack}")
+        if not force:
+            console.print()
+            console.print("[dim]Use --force to replace existing packs.[/dim]")
+
+    if not added and not replaced:
+        console.print("[dim]No packs were added.[/dim]")
+    else:
+        console.print()
+        console.print("[green]Config updated.[/green]")
 
 
 if __name__ == "__main__":

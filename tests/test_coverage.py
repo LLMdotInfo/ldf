@@ -442,3 +442,212 @@ class TestGenerateReportAdvanced:
         captured = capsys.readouterr()
         assert "NOT SATISFIED" in captured.out
         assert "more coverage" in captured.out
+
+
+class TestSaveCoverageSnapshot:
+    """Tests for save_coverage_snapshot function."""
+
+    def test_saves_snapshot(self, temp_project: Path, sample_pytest_coverage_json: dict, monkeypatch):
+        """Test saving a coverage snapshot."""
+        from ldf.coverage import save_coverage_snapshot
+
+        # Create a mock report
+        report = {
+            "coverage_percent": 85.0,
+            "lines_covered": 850,
+            "lines_total": 1000,
+            "threshold_default": 80,
+            "files": [{"path": "src/auth.py", "percent": 90.0}],
+        }
+
+        result = save_coverage_snapshot("baseline", report, project_root=temp_project)
+
+        assert result.exists()
+        assert result.name == "baseline.json"
+
+        # Verify content
+        with open(result) as f:
+            data = json.load(f)
+        assert data["name"] == "baseline"
+        assert data["coverage_percent"] == 85.0
+        assert "saved_at" in data
+
+    def test_creates_snapshots_dir(self, temp_project: Path):
+        """Test that snapshots directory is created if needed."""
+        from ldf.coverage import save_coverage_snapshot
+
+        report = {"coverage_percent": 75.0, "files": []}
+
+        result = save_coverage_snapshot("test", report, project_root=temp_project)
+
+        assert (temp_project / ".ldf" / "coverage-snapshots").exists()
+        assert result.exists()
+
+    def test_uses_cwd_when_no_root(self, temp_project: Path, monkeypatch):
+        """Test using current directory when project_root is None."""
+        from ldf.coverage import save_coverage_snapshot
+
+        monkeypatch.chdir(temp_project)
+        report = {"coverage_percent": 80.0, "files": []}
+
+        result = save_coverage_snapshot("cwd-test", report, project_root=None)
+
+        assert result.exists()
+
+
+class TestCompareCoverage:
+    """Tests for compare_coverage function."""
+
+    def test_compares_with_baseline(
+        self, temp_project: Path, sample_pytest_coverage_json: dict, monkeypatch, capsys
+    ):
+        """Test comparing current coverage with baseline."""
+        from ldf.coverage import compare_coverage, save_coverage_snapshot
+
+        # Create baseline
+        baseline_report = {
+            "coverage_percent": 75.0,
+            "lines_covered": 750,
+            "lines_total": 1000,
+            "files": [{"path": "src/auth.py", "percent": 70.0}],
+        }
+        save_coverage_snapshot("baseline", baseline_report, project_root=temp_project)
+
+        # Create current coverage (higher)
+        coverage_file = temp_project / "coverage.json"
+        coverage_file.write_text(json.dumps(sample_pytest_coverage_json))
+        monkeypatch.chdir(temp_project)
+
+        result = compare_coverage("baseline", project_root=temp_project)
+
+        captured = capsys.readouterr()
+        assert "Coverage Comparison" in captured.out
+        assert result.get("status") != "ERROR"
+
+    def test_error_when_baseline_not_found(self, temp_project: Path, monkeypatch, capsys):
+        """Test error when baseline doesn't exist."""
+        from ldf.coverage import compare_coverage
+
+        monkeypatch.chdir(temp_project)
+
+        result = compare_coverage("nonexistent", project_root=temp_project)
+
+        assert result["status"] == "ERROR"
+        assert "not found" in result["error"].lower()
+        captured = capsys.readouterr()
+        assert "not found" in captured.out.lower()
+
+    def test_error_with_no_current_coverage(self, temp_project: Path, monkeypatch, capsys):
+        """Test error when no current coverage exists."""
+        from ldf.coverage import compare_coverage, save_coverage_snapshot
+
+        # Create baseline but no current coverage
+        baseline_report = {"coverage_percent": 80.0, "files": []}
+        save_coverage_snapshot("baseline", baseline_report, project_root=temp_project)
+        monkeypatch.chdir(temp_project)
+
+        result = compare_coverage("baseline", project_root=temp_project)
+
+        assert result["status"] == "ERROR"
+        assert "current coverage" in result["error"].lower()
+
+    def test_compares_with_file_path(
+        self, temp_project: Path, sample_pytest_coverage_json: dict, monkeypatch, capsys
+    ):
+        """Test comparing with a file path."""
+        from ldf.coverage import compare_coverage
+
+        # Create baseline file
+        baseline = {
+            "coverage_percent": 70.0,
+            "lines_covered": 700,
+            "lines_total": 1000,
+            "files": [],
+        }
+        baseline_path = temp_project / "old-coverage.json"
+        baseline_path.write_text(json.dumps(baseline))
+
+        # Create current coverage
+        coverage_file = temp_project / "coverage.json"
+        coverage_file.write_text(json.dumps(sample_pytest_coverage_json))
+        monkeypatch.chdir(temp_project)
+
+        result = compare_coverage("old-coverage.json", project_root=temp_project)
+
+        assert result.get("status") != "ERROR"
+
+    def test_shows_improved_files(
+        self, temp_project: Path, sample_pytest_coverage_json: dict, monkeypatch, capsys
+    ):
+        """Test showing improved files in diff."""
+        from ldf.coverage import compare_coverage, save_coverage_snapshot
+
+        # Baseline with lower coverage
+        baseline = {
+            "coverage_percent": 50.0,
+            "lines_covered": 500,
+            "lines_total": 1000,
+            "files": [{"path": "src/auth.py", "percent": 50.0}],
+        }
+        save_coverage_snapshot("old", baseline, project_root=temp_project)
+
+        # Current with higher coverage
+        coverage_file = temp_project / "coverage.json"
+        coverage_file.write_text(json.dumps(sample_pytest_coverage_json))
+        monkeypatch.chdir(temp_project)
+
+        result = compare_coverage("old", project_root=temp_project)
+
+        captured = capsys.readouterr()
+        assert result.get("status") != "ERROR"
+
+
+class TestUploadCoverage:
+    """Tests for upload_coverage function."""
+
+    def test_uploads_to_file_destination(self, temp_project: Path, tmp_path: Path):
+        """Test uploading coverage to a file destination."""
+        from ldf.coverage import upload_coverage
+
+        report = {
+            "coverage_percent": 85.0,
+            "lines_covered": 850,
+            "lines_total": 1000,
+        }
+        dest_file = tmp_path / "uploaded-coverage.json"
+
+        result = upload_coverage(f"file://{dest_file}", report, project_root=temp_project)
+
+        assert result is True
+        assert dest_file.exists()
+
+    def test_fails_with_unsupported_destination(self, temp_project: Path):
+        """Test failure with unsupported destination type."""
+        from ldf.coverage import upload_coverage
+
+        report = {"coverage_percent": 80.0}
+
+        result = upload_coverage("ftp://unsupported", report, project_root=temp_project)
+
+        assert result is False
+
+    def test_fails_with_missing_boto3_for_s3(self, temp_project: Path, monkeypatch):
+        """Test failure when boto3 is not available for S3 upload."""
+        from ldf.coverage import upload_coverage
+
+        # Mock import to fail for boto3
+        import builtins
+        original_import = builtins.__import__
+
+        def mock_import(name, *args, **kwargs):
+            if name == "boto3":
+                raise ImportError("No module named 'boto3'")
+            return original_import(name, *args, **kwargs)
+
+        monkeypatch.setattr(builtins, "__import__", mock_import)
+
+        report = {"coverage_percent": 80.0}
+
+        result = upload_coverage("s3://bucket/path", report, project_root=temp_project)
+
+        assert result is False

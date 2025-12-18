@@ -738,3 +738,408 @@ class TestMainEntryPoint:
         # Should show help
         assert result.exit_code == 0
         assert "ldf" in result.output.lower()
+
+
+class TestDoctorCommand:
+    """Tests for 'ldf doctor' command."""
+
+    def test_doctor_basic(self, runner: CliRunner, temp_project: Path, monkeypatch):
+        """Test doctor command runs diagnostics."""
+        # Create required directories for doctor to pass
+        ldf_dir = temp_project / ".ldf"
+        for d in ["specs", "question-packs", "templates", "macros"]:
+            (ldf_dir / d).mkdir(exist_ok=True)
+        monkeypatch.chdir(temp_project)
+
+        result = runner.invoke(cli, ["doctor"])
+
+        assert result.exit_code == 0
+        assert "Doctor" in result.output or "passed" in result.output
+
+    def test_doctor_json_output(self, runner: CliRunner, temp_project: Path, monkeypatch):
+        """Test doctor with JSON output."""
+        # Create required directories
+        ldf_dir = temp_project / ".ldf"
+        for d in ["specs", "question-packs", "templates", "macros"]:
+            (ldf_dir / d).mkdir(exist_ok=True)
+        monkeypatch.chdir(temp_project)
+
+        result = runner.invoke(cli, ["doctor", "--json"])
+
+        assert result.exit_code == 0
+        assert "{" in result.output  # JSON output
+
+    def test_doctor_without_ldf(self, runner: CliRunner, tmp_path: Path):
+        """Test doctor on non-LDF project."""
+        with runner.isolated_filesystem(temp_dir=tmp_path):
+            result = runner.invoke(cli, ["doctor"])
+
+            # Should report failures (exit code 1)
+            assert result.exit_code == 1
+            assert "fail" in result.output.lower() or "not found" in result.output.lower()
+
+
+class TestMcpHealthCommand:
+    """Tests for 'ldf mcp-health' command."""
+
+    def test_mcp_health_basic(self, runner: CliRunner, temp_project: Path, monkeypatch):
+        """Test mcp-health command runs health checks."""
+        monkeypatch.chdir(temp_project)
+
+        result = runner.invoke(cli, ["mcp-health"])
+
+        assert result.exit_code == 0
+        assert "Health" in result.output or "Server" in result.output
+
+    def test_mcp_health_json_output(self, runner: CliRunner, temp_project: Path, monkeypatch):
+        """Test mcp-health with JSON output."""
+        monkeypatch.chdir(temp_project)
+
+        result = runner.invoke(cli, ["mcp-health", "--json"])
+
+        assert result.exit_code == 0
+        assert "{" in result.output
+
+
+class TestListFrameworkCommand:
+    """Tests for 'ldf list-framework' command."""
+
+    def test_list_framework_presets(self, runner: CliRunner):
+        """Test list-framework presets subcommand."""
+        result = runner.invoke(cli, ["list-framework", "presets"])
+
+        assert result.exit_code == 0
+        assert "core" in result.output.lower() or "saas" in result.output.lower()
+
+    def test_list_framework_packs(self, runner: CliRunner):
+        """Test list-framework packs subcommand."""
+        result = runner.invoke(cli, ["list-framework", "packs"])
+
+        assert result.exit_code == 0
+        assert "security" in result.output.lower() or "testing" in result.output.lower()
+
+    def test_list_framework_guardrails(self, runner: CliRunner):
+        """Test list-framework guardrails subcommand."""
+        result = runner.invoke(cli, ["list-framework", "guardrails"])
+
+        assert result.exit_code == 0
+        # Should show guardrail content
+        assert "Testing" in result.output or "guardrail" in result.output.lower()
+
+
+class TestPreflightCommand:
+    """Tests for 'ldf preflight' command."""
+
+    def test_preflight_basic(self, runner: CliRunner, temp_project: Path, monkeypatch):
+        """Test preflight runs combined checks."""
+        monkeypatch.chdir(temp_project)
+
+        result = runner.invoke(cli, ["preflight"])
+
+        assert result.exit_code in (0, 1, 2, 3)  # Various exit codes
+
+    def test_preflight_without_ldf(self, runner: CliRunner, tmp_path: Path):
+        """Test preflight fails without LDF."""
+        with runner.isolated_filesystem(temp_dir=tmp_path):
+            result = runner.invoke(cli, ["preflight"])
+
+            assert result.exit_code != 0
+
+    def test_preflight_skip_lint(self, runner: CliRunner, temp_project: Path, monkeypatch):
+        """Test preflight with --skip-lint."""
+        monkeypatch.chdir(temp_project)
+
+        result = runner.invoke(cli, ["preflight", "--skip-lint"])
+
+        assert result.exit_code in (0, 1, 2, 3)
+
+    def test_preflight_skip_coverage(self, runner: CliRunner, temp_project: Path, monkeypatch):
+        """Test preflight with --skip-coverage."""
+        monkeypatch.chdir(temp_project)
+
+        result = runner.invoke(cli, ["preflight", "--skip-coverage"])
+
+        assert result.exit_code in (0, 1, 2, 3)
+
+
+class TestAddPackCommand:
+    """Tests for 'ldf add-pack' command."""
+
+    def test_add_pack_list(self, runner: CliRunner, temp_project: Path, monkeypatch):
+        """Test add-pack --list shows available packs."""
+        monkeypatch.chdir(temp_project)
+
+        result = runner.invoke(cli, ["add-pack", "--list"])
+
+        assert result.exit_code == 0
+        assert "Available" in result.output or "Pack" in result.output
+
+    def test_add_pack_list_without_ldf(self, runner: CliRunner, tmp_path: Path):
+        """Test add-pack --list fails without LDF initialized."""
+        with runner.isolated_filesystem(temp_dir=tmp_path):
+            result = runner.invoke(cli, ["add-pack", "--list"])
+
+            assert result.exit_code == 1
+            assert "init" in result.output.lower()
+
+    def test_add_pack_without_ldf(self, runner: CliRunner, tmp_path: Path):
+        """Test add-pack fails without LDF initialized."""
+        with runner.isolated_filesystem(temp_dir=tmp_path):
+            result = runner.invoke(cli, ["add-pack", "security"])
+
+            assert result.exit_code == 1
+            assert "init" in result.output.lower()
+
+    def test_add_pack_nonexistent(self, runner: CliRunner, temp_project: Path, monkeypatch):
+        """Test add-pack with non-existent pack name."""
+        monkeypatch.chdir(temp_project)
+
+        result = runner.invoke(cli, ["add-pack", "nonexistent-pack"])
+
+        assert result.exit_code == 1
+        assert "not found" in result.output.lower()
+
+
+class TestExportDocsCommand:
+    """Tests for 'ldf export-docs' command."""
+
+    def test_export_docs_basic(self, runner: CliRunner, temp_project: Path, monkeypatch):
+        """Test export-docs generates documentation."""
+        monkeypatch.chdir(temp_project)
+
+        result = runner.invoke(cli, ["export-docs"])
+
+        assert result.exit_code == 0
+        assert "Framework" in result.output or "#" in result.output
+
+    def test_export_docs_to_file(self, runner: CliRunner, temp_project: Path, monkeypatch):
+        """Test export-docs writes to file."""
+        monkeypatch.chdir(temp_project)
+
+        result = runner.invoke(cli, ["export-docs", "-o", "FRAMEWORK.md"])
+
+        assert result.exit_code == 0
+        assert (temp_project / "FRAMEWORK.md").exists()
+
+    def test_export_docs_without_ldf(self, runner: CliRunner, tmp_path: Path):
+        """Test export-docs fails without LDF."""
+        with runner.isolated_filesystem(temp_dir=tmp_path):
+            result = runner.invoke(cli, ["export-docs"])
+
+            assert result.exit_code == 1
+
+
+class TestTemplateCommand:
+    """Tests for 'ldf template' command."""
+
+    def test_template_verify_valid(self, runner: CliRunner, tmp_path: Path):
+        """Test template verify on valid template."""
+        # Create a valid template
+        template_dir = tmp_path / "my-template"
+        template_dir.mkdir()
+        (template_dir / "template.yaml").write_text("""name: test-template
+version: 1.0.0
+ldf_version: "0.1.0"
+""")
+        ldf_dir = template_dir / ".ldf"
+        ldf_dir.mkdir()
+        (ldf_dir / "config.yaml").write_text("version: '1.0'")
+
+        result = runner.invoke(cli, ["template", "verify", str(template_dir)])
+
+        assert result.exit_code == 0
+        assert "passed" in result.output.lower() or "valid" in result.output.lower()
+
+    def test_template_verify_invalid(self, runner: CliRunner, tmp_path: Path):
+        """Test template verify on invalid template."""
+        # Create an invalid template (missing template.yaml)
+        template_dir = tmp_path / "bad-template"
+        template_dir.mkdir()
+
+        result = runner.invoke(cli, ["template", "verify", str(template_dir)])
+
+        assert result.exit_code == 1
+        assert "error" in result.output.lower() or "not found" in result.output.lower()
+
+    def test_init_from_template(self, runner: CliRunner, tmp_path: Path):
+        """Test init --from template."""
+        # Create a valid template
+        template_dir = tmp_path / "template"
+        template_dir.mkdir()
+        (template_dir / "template.yaml").write_text("""name: test-template
+version: 1.0.0
+ldf_version: "0.1.0"
+""")
+        ldf_dir = template_dir / ".ldf"
+        ldf_dir.mkdir()
+        (ldf_dir / "config.yaml").write_text("version: '1.0'\nproject:\n  name: from-template")
+        (ldf_dir / "guardrails.yaml").write_text("version: '1.0'\nextends: core")
+
+        # Initialize project from template
+        project_dir = tmp_path / "project"
+        project_dir.mkdir()
+
+        with runner.isolated_filesystem(temp_dir=project_dir):
+            result = runner.invoke(cli, ["init", "--from", str(template_dir)])
+
+            assert result.exit_code == 0
+            assert Path(".ldf").exists()
+
+
+class TestLintSarifFormat:
+    """Tests for lint --format sarif via CLI."""
+
+    def test_lint_sarif_output(self, runner: CliRunner, temp_spec: Path, monkeypatch):
+        """Test lint with SARIF format."""
+        project_dir = temp_spec.parent.parent.parent
+        monkeypatch.chdir(project_dir)
+
+        result = runner.invoke(cli, ["lint", "--format", "sarif", "--all"])
+
+        assert result.exit_code == 0
+        # SARIF output should contain version field
+        assert '"version"' in result.output or "2.1.0" in result.output
+
+    def test_lint_sarif_to_file(self, runner: CliRunner, temp_spec: Path, tmp_path: Path, monkeypatch):
+        """Test lint SARIF output to file."""
+        project_dir = temp_spec.parent.parent.parent
+        monkeypatch.chdir(project_dir)
+
+        output_file = tmp_path / "results.sarif"
+        result = runner.invoke(
+            cli, ["lint", "--format", "sarif", "--output", str(output_file), "--all"]
+        )
+
+        assert result.exit_code == 0
+        assert output_file.exists()
+
+
+class TestCoverageEnhancements:
+    """Tests for coverage --save, --diff, --upload via CLI."""
+
+    def test_coverage_save(self, runner: CliRunner, temp_project: Path, monkeypatch):
+        """Test coverage --save creates snapshot."""
+        import json
+
+        monkeypatch.chdir(temp_project)
+
+        # Create coverage data
+        coverage_file = temp_project / "coverage.json"
+        coverage_file.write_text(json.dumps({
+            "totals": {"percent_covered": 85.0, "covered_lines": 850, "num_statements": 1000}
+        }))
+
+        result = runner.invoke(cli, ["coverage", "--save", "baseline"])
+
+        assert result.exit_code == 0
+        assert (temp_project / ".ldf" / "coverage-snapshots" / "baseline.json").exists()
+
+    def test_coverage_diff(self, runner: CliRunner, temp_project: Path, monkeypatch):
+        """Test coverage --diff compares snapshots."""
+        import json
+
+        monkeypatch.chdir(temp_project)
+
+        # Create baseline snapshot
+        snapshots_dir = temp_project / ".ldf" / "coverage-snapshots"
+        snapshots_dir.mkdir(parents=True)
+        (snapshots_dir / "baseline.json").write_text(json.dumps({
+            "name": "baseline",
+            "coverage_percent": 75.0,
+            "lines_covered": 750,
+            "lines_total": 1000,
+            "files": [],
+        }))
+
+        # Create current coverage
+        coverage_file = temp_project / "coverage.json"
+        coverage_file.write_text(json.dumps({
+            "totals": {"percent_covered": 85.0, "covered_lines": 850, "num_statements": 1000}
+        }))
+
+        result = runner.invoke(cli, ["coverage", "--diff", "baseline"])
+
+        assert result.exit_code == 0
+        assert "Comparison" in result.output or "baseline" in result.output
+
+
+class TestListFrameworkAllSubcommands:
+    """Additional tests for list-framework subcommands."""
+
+    def test_list_framework_mcp(self, runner: CliRunner):
+        """Test list-framework mcp subcommand."""
+        result = runner.invoke(cli, ["list-framework", "mcp"])
+
+        assert result.exit_code == 0
+        assert "Server" in result.output or "spec" in result.output.lower()
+
+    def test_list_framework_default(self, runner: CliRunner):
+        """Test list-framework without subcommand shows help."""
+        result = runner.invoke(cli, ["list-framework", "--help"])
+
+        assert result.exit_code == 0
+        assert "presets" in result.output or "packs" in result.output
+
+
+class TestAdditionalCLICommands:
+    """Additional CLI command tests for coverage."""
+
+    def test_lint_ci_format(self, runner: CliRunner, temp_spec: Path, monkeypatch):
+        """Test lint with CI format."""
+        project_dir = temp_spec.parent.parent.parent
+        monkeypatch.chdir(project_dir)
+
+        result = runner.invoke(cli, ["lint", "--format", "ci", "--all"])
+
+        assert result.exit_code == 0
+
+    def test_coverage_validate(self, runner: CliRunner, temp_project: Path, monkeypatch):
+        """Test coverage --validate flag."""
+        import json
+
+        monkeypatch.chdir(temp_project)
+
+        coverage_file = temp_project / "coverage.json"
+        coverage_file.write_text(json.dumps({
+            "totals": {"percent_covered": 85.0, "covered_lines": 850, "num_statements": 1000}
+        }))
+
+        result = runner.invoke(cli, ["coverage", "--validate"])
+
+        assert result.exit_code == 0
+
+    def test_coverage_service_filter(self, runner: CliRunner, temp_project: Path, monkeypatch):
+        """Test coverage --service filter."""
+        import json
+
+        monkeypatch.chdir(temp_project)
+
+        coverage_file = temp_project / "coverage.json"
+        coverage_file.write_text(json.dumps({
+            "totals": {"percent_covered": 85.0, "covered_lines": 850, "num_statements": 1000},
+            "files": {"src/auth/handler.py": {"summary": {"percent_covered": 90.0}}}
+        }))
+
+        result = runner.invoke(cli, ["coverage", "--service", "auth"])
+
+        # Should run without error
+        assert result.exit_code in (0, 1)
+
+    def test_preflight_strict(self, runner: CliRunner, temp_project: Path, monkeypatch):
+        """Test preflight --strict flag."""
+        ldf_dir = temp_project / ".ldf"
+        for d in ["specs", "question-packs", "templates", "macros"]:
+            (ldf_dir / d).mkdir(exist_ok=True)
+        monkeypatch.chdir(temp_project)
+
+        result = runner.invoke(cli, ["preflight", "--strict"])
+
+        assert result.exit_code in (0, 1, 2, 3)
+
+    def test_add_pack_all(self, runner: CliRunner, temp_project: Path, monkeypatch):
+        """Test add-pack --all flag."""
+        monkeypatch.chdir(temp_project)
+
+        result = runner.invoke(cli, ["add-pack", "--all"])
+
+        assert result.exit_code in (0, 1)

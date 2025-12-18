@@ -481,3 +481,246 @@ class TestLintEdgeCases:
         result = lint_specs(spec_name="incomplete", lint_all=False, fix=False)
 
         assert result == 1  # Should fail due to missing files
+
+
+class TestSarifOutput:
+    """Tests for SARIF output format."""
+
+    def test_sarif_format_produces_valid_json(self, temp_spec: Path, monkeypatch, capsys):
+        """Test that SARIF format produces valid JSON."""
+        import json
+
+        project_dir = temp_spec.parent.parent.parent
+        monkeypatch.chdir(project_dir)
+
+        result = lint_specs(
+            spec_name="test-feature",
+            lint_all=False,
+            fix=False,
+            output_format="sarif",
+        )
+
+        captured = capsys.readouterr()
+        # SARIF output should be valid JSON
+        sarif = json.loads(captured.out)
+        assert "$schema" in sarif
+        assert sarif["version"] == "2.1.0"
+        assert "runs" in sarif
+
+    def test_sarif_format_has_tool_driver(self, temp_spec: Path, monkeypatch, capsys):
+        """Test that SARIF output has tool driver info."""
+        import json
+
+        project_dir = temp_spec.parent.parent.parent
+        monkeypatch.chdir(project_dir)
+
+        lint_specs(
+            spec_name="test-feature",
+            lint_all=False,
+            fix=False,
+            output_format="sarif",
+        )
+
+        captured = capsys.readouterr()
+        sarif = json.loads(captured.out)
+
+        assert len(sarif["runs"]) > 0
+        run = sarif["runs"][0]
+        assert "tool" in run
+        assert "driver" in run["tool"]
+        assert run["tool"]["driver"]["name"] == "ldf-lint"
+
+    def test_sarif_format_includes_rules(self, temp_spec: Path, monkeypatch, capsys):
+        """Test that SARIF output includes rule definitions."""
+        import json
+
+        project_dir = temp_spec.parent.parent.parent
+        monkeypatch.chdir(project_dir)
+
+        lint_specs(
+            spec_name="test-feature",
+            lint_all=False,
+            fix=False,
+            output_format="sarif",
+        )
+
+        captured = capsys.readouterr()
+        sarif = json.loads(captured.out)
+
+        run = sarif["runs"][0]
+        assert "rules" in run["tool"]["driver"]
+
+    def test_sarif_format_reports_errors(self, temp_project: Path, monkeypatch, capsys):
+        """Test that SARIF format reports lint errors."""
+        import json
+
+        # Create a spec with errors
+        spec_dir = temp_project / ".ldf" / "specs" / "bad-spec"
+        spec_dir.mkdir(parents=True)
+
+        (spec_dir / "requirements.md").write_text("# Requirements\n")
+        # Missing design.md and tasks.md
+
+        monkeypatch.chdir(temp_project)
+        lint_specs(
+            spec_name="bad-spec",
+            lint_all=False,
+            fix=False,
+            output_format="sarif",
+        )
+
+        captured = capsys.readouterr()
+        sarif = json.loads(captured.out)
+
+        run = sarif["runs"][0]
+        assert "results" in run
+        # Should have some results for the errors
+        assert len(run["results"]) > 0
+
+    def test_sarif_format_error_has_location(self, temp_project: Path, monkeypatch, capsys):
+        """Test that SARIF errors include location information."""
+        import json
+
+        # Create a spec with errors
+        spec_dir = temp_project / ".ldf" / "specs" / "error-spec"
+        spec_dir.mkdir(parents=True)
+
+        (spec_dir / "requirements.md").write_text("# Requirements\n")
+
+        monkeypatch.chdir(temp_project)
+        lint_specs(
+            spec_name="error-spec",
+            lint_all=False,
+            fix=False,
+            output_format="sarif",
+        )
+
+        captured = capsys.readouterr()
+        sarif = json.loads(captured.out)
+
+        run = sarif["runs"][0]
+        if run["results"]:
+            result = run["results"][0]
+            assert "ruleId" in result
+            assert "message" in result
+            assert "locations" in result
+
+    def test_sarif_format_all_specs(self, temp_project: Path, monkeypatch, capsys):
+        """Test SARIF format with --all flag."""
+        import json
+
+        # Create multiple specs
+        for name in ["spec-a", "spec-b"]:
+            spec_dir = temp_project / ".ldf" / "specs" / name
+            spec_dir.mkdir(parents=True)
+            (spec_dir / "requirements.md").write_text("# Requirements\n")
+
+        monkeypatch.chdir(temp_project)
+        lint_specs(
+            spec_name=None,
+            lint_all=True,
+            fix=False,
+            output_format="sarif",
+        )
+
+        captured = capsys.readouterr()
+        sarif = json.loads(captured.out)
+
+        # Should have valid SARIF structure
+        assert sarif["version"] == "2.1.0"
+
+    def test_sarif_format_writes_to_output_file(
+        self, temp_spec: Path, tmp_path: Path, monkeypatch
+    ):
+        """Test that SARIF output can be written to a file."""
+        import json
+
+        project_dir = temp_spec.parent.parent.parent
+        monkeypatch.chdir(project_dir)
+
+        output_file = tmp_path / "results.sarif"
+
+        lint_specs(
+            spec_name="test-feature",
+            lint_all=False,
+            fix=False,
+            output_format="sarif",
+            output_file=str(output_file),
+        )
+
+        assert output_file.exists()
+        sarif = json.loads(output_file.read_text())
+        assert sarif["version"] == "2.1.0"
+
+
+class TestLintReport:
+    """Tests for lint report dataclass."""
+
+    def test_lint_result_fields(self):
+        """Test LintResult has expected fields."""
+        from ldf.lint import LintResult
+
+        result = LintResult(
+            rule_id="ldf/missing-file",
+            level="error",
+            message="Missing design.md",
+            spec_name="test-spec",
+            file_name="design.md",
+            line=1,
+        )
+
+        assert result.rule_id == "ldf/missing-file"
+        assert result.level == "error"
+        assert result.spec_name == "test-spec"
+        assert result.file_name == "design.md"
+        assert result.line == 1
+
+    def test_lint_report_add_error(self):
+        """Test LintReport add_error method."""
+        from ldf.lint import LintReport
+
+        report = LintReport()
+        report.add_error(
+            rule_id="ldf/missing-file",
+            message="Missing design.md",
+            spec_name="test",
+            file_name="design.md",
+        )
+
+        assert len(report.results) == 1
+        assert report.results[0].level == "error"
+
+    def test_lint_report_add_warning(self):
+        """Test LintReport add_warning method."""
+        from ldf.lint import LintReport
+
+        report = LintReport()
+        report.add_warning(
+            rule_id="ldf/style-issue",
+            message="Style issue",
+            spec_name="test",
+        )
+
+        assert len(report.results) == 1
+        assert report.results[0].level == "warning"
+
+    def test_lint_report_error_count(self):
+        """Test LintReport counts errors correctly."""
+        from ldf.lint import LintReport
+
+        report = LintReport()
+        report.add_error("r1", "Error 1", "test")
+        report.add_error("r2", "Error 2", "test")
+        report.add_warning("r3", "Warning 1", "test")
+
+        assert report.error_count == 2
+        assert report.warning_count == 1
+
+    def test_lint_report_empty_has_zero_counts(self):
+        """Test empty LintReport has zero counts."""
+        from ldf.lint import LintReport
+
+        report = LintReport()
+
+        assert report.error_count == 0
+        assert report.warning_count == 0
