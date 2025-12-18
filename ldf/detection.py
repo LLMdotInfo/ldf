@@ -173,7 +173,10 @@ def detect_project_state(project_root: Path | None = None) -> DetectionResult:
     has_specs_dir = (ldf_dir / "specs").is_dir()
     has_answerpacks_dir = (ldf_dir / "answerpacks").is_dir()
     has_question_packs_dir = (ldf_dir / "question-packs").is_dir()
-    has_templates = all((ldf_dir / t).exists() for t in ["templates/requirements.md", "templates/design.md", "templates/tasks.md"])
+    template_files = [
+        "templates/requirements.md", "templates/design.md", "templates/tasks.md"
+    ]
+    has_templates = all((ldf_dir / t).exists() for t in template_files)
     has_macros = (ldf_dir / "macros").is_dir() and any((ldf_dir / "macros").iterdir())
     has_claude_md = (project_root / "CLAUDE.md").exists()
     has_claude_commands = (project_root / ".claude" / "commands").is_dir()
@@ -201,7 +204,7 @@ def detect_project_state(project_root: Path | None = None) -> DetectionResult:
     # Determine state based on findings
     if invalid_files:
         state = ProjectState.CORRUPTED
-        recommended_action = f"Config is corrupted. Run 'ldf init --force' to reinitialize."
+        recommended_action = "Config is corrupted. Run 'ldf init --force' to reinitialize."
         recommended_command = "ldf init --force"
     elif not config_valid:
         state = ProjectState.CORRUPTED
@@ -213,7 +216,8 @@ def detect_project_state(project_root: Path | None = None) -> DetectionResult:
         recommended_command = "ldf update"
     elif missing_files:
         state = ProjectState.PARTIAL
-        recommended_action = f"Missing files: {', '.join(missing_files[:3])}. Run 'ldf init --repair'."
+        files_preview = ", ".join(missing_files[:3])
+        recommended_action = f"Missing files: {files_preview}. Run 'ldf init --repair'."
         recommended_command = "ldf init --repair"
     elif project_version == __version__:
         state = ProjectState.CURRENT
@@ -225,18 +229,27 @@ def detect_project_state(project_root: Path | None = None) -> DetectionResult:
             from packaging.version import Version
             if Version(project_version) < Version(__version__):
                 state = ProjectState.OUTDATED
-                recommended_action = f"Update available ({project_version} → {__version__}). Run 'ldf update'."
+                recommended_action = (
+                    f"Update available ({project_version} → {__version__}). "
+                    "Run 'ldf update'."
+                )
                 recommended_command = "ldf update"
             else:
                 # Project is newer than installed (edge case)
                 state = ProjectState.CURRENT
-                recommended_action = f"Project uses newer LDF ({project_version}). Consider upgrading LDF CLI."
+                recommended_action = (
+                    f"Project uses newer LDF ({project_version}). "
+                    "Consider upgrading LDF CLI."
+                )
                 recommended_command = None
         except Exception:
             # Fall back to string comparison if packaging not available
             if project_version != __version__:
                 state = ProjectState.OUTDATED
-                recommended_action = f"Version mismatch ({project_version} → {__version__}). Run 'ldf update'."
+                recommended_action = (
+                    f"Version mismatch ({project_version} → {__version__}). "
+                    "Run 'ldf update'."
+                )
                 recommended_command = "ldf update"
             else:
                 state = ProjectState.CURRENT
@@ -322,7 +335,7 @@ def get_specs_summary(ldf_dir: Path) -> list[dict]:
     Returns:
         List of spec info dicts with name and status
     """
-    specs = []
+    specs: list[dict[str, str | bool]] = []
     specs_dir = ldf_dir / "specs"
 
     if not specs_dir.exists():
@@ -332,7 +345,7 @@ def get_specs_summary(ldf_dir: Path) -> list[dict]:
         if not spec_dir.is_dir():
             continue
 
-        spec_info = {
+        spec_info: dict[str, str | bool] = {
             "name": spec_dir.name,
             "has_requirements": (spec_dir / "requirements.md").exists(),
             "has_design": (spec_dir / "design.md").exists(),

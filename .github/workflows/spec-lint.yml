@@ -5,7 +5,6 @@ on:
     paths:
       - '.ldf/**'
       - 'ldf/**'
-      - 'framework/**'
       - 'tests/**'
   workflow_dispatch:
 

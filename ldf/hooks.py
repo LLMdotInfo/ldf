@@ -170,9 +170,8 @@ def print_hooks_status(project_root: Path | None = None) -> None:
     pre_commit = config.get("pre_commit", {})
 
     console.print("\n[bold]Configuration:[/bold]")
-    console.print(
-        f"  Run on all commits: {'Yes' if pre_commit.get('run_on_all_commits', True) else 'No (spec changes only)'}"
-    )
+    run_all = pre_commit.get('run_on_all_commits', True)
+    console.print(f"  Run on all commits: {'Yes' if run_all else 'No (spec changes only)'}")
     console.print(
         f"  Strict mode: {'Yes' if pre_commit.get('strict', False) else 'No'}"
     )

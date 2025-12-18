@@ -5,6 +5,7 @@ with descriptions displayed inline for better user experience.
 """
 
 from pathlib import Path
+from typing import cast
 
 import questionary
 from questionary import Choice, Style
@@ -123,7 +124,7 @@ def prompt_preset() -> str:
     if result is None:
         raise KeyboardInterrupt("User cancelled")
 
-    return result
+    return cast(str, result)
 
 
 def prompt_question_packs(preset: str) -> list[str]:
@@ -184,7 +185,7 @@ def prompt_question_packs(preset: str) -> list[str]:
     if selected_domain is None:
         raise KeyboardInterrupt("User cancelled")
 
-    return core_packs + selected_domain
+    return core_packs + cast(list[str], selected_domain)
 
 
 def prompt_mcp_servers() -> list[str]:
@@ -221,7 +222,7 @@ def prompt_mcp_servers() -> list[str]:
     if result is None:
         raise KeyboardInterrupt("User cancelled")
 
-    return result
+    return cast(list[str], result)
 
 
 def prompt_install_hooks() -> bool:
@@ -242,7 +243,7 @@ def prompt_install_hooks() -> bool:
     if result is None:
         raise KeyboardInterrupt("User cancelled")
 
-    return result
+    return cast(bool, result)
 
 
 def confirm_initialization(
@@ -272,7 +273,7 @@ def confirm_initialization(
         f"[bold]Project:[/bold] [cyan]{project_path}[/cyan]",
         f"[bold]Preset:[/bold] [cyan]{preset}[/cyan]",
         f"[bold]Question packs:[/bold] [cyan]{', '.join(question_packs)}[/cyan]",
-        f"[bold]MCP servers:[/bold] [cyan]{', '.join(mcp_servers) if mcp_servers else 'None'}[/cyan]",
+        f"[bold]MCP servers:[/bold] [cyan]{', '.join(mcp_servers) or 'None'}[/cyan]",
         f"[bold]Install hooks:[/bold] [cyan]{'Yes' if install_hooks else 'No'}[/cyan]",
     ]
 
@@ -294,4 +295,4 @@ def confirm_initialization(
     if result is None:
         raise KeyboardInterrupt("User cancelled")
 
-    return result
+    return cast(bool, result)

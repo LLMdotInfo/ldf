@@ -1,7 +1,5 @@
 """Pytest configuration and fixtures for LDF tests."""
 
-import os
-import tempfile
 from pathlib import Path
 
 import pytest
@@ -177,7 +175,7 @@ Before implementing each task, verify applicable guardrails:
 @pytest.fixture
 def ldf_framework_path() -> Path:
     """Return path to the LDF framework directory."""
-    return Path(__file__).parent.parent / "framework"
+    return Path(__file__).parent.parent / "ldf" / "_framework"
 
 
 @pytest.fixture

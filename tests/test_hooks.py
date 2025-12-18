@@ -1,23 +1,10 @@
 """Tests for ldf.hooks and ldf.utils.hooks modules."""
 
-import os
 import stat
 from pathlib import Path
 
 import pytest
 
-from ldf.utils.hooks import (
-    LDF_HOOK_MARKER,
-    detect_project_languages,
-    generate_precommit_script,
-    get_default_hooks_config,
-    get_git_hooks_dir,
-    get_hook_config,
-    install_hook,
-    is_hook_installed,
-    uninstall_hook,
-    update_config_with_hooks,
-)
 from ldf.hooks import (
     _configure_linters_auto,
     _configure_linters_interactive,
@@ -26,6 +13,17 @@ from ldf.hooks import (
     install_hooks,
     print_hooks_status,
     uninstall_hooks,
+)
+from ldf.utils.hooks import (
+    LDF_HOOK_MARKER,
+    detect_project_languages,
+    generate_precommit_script,
+    get_default_hooks_config,
+    get_git_hooks_dir,
+    install_hook,
+    is_hook_installed,
+    uninstall_hook,
+    update_config_with_hooks,
 )
 
 
@@ -542,7 +540,7 @@ class TestConfigureLintersInteractive:
         config = get_default_hooks_config()
         languages = {"python": False, "typescript": False, "go": False}
 
-        result = _configure_linters_interactive(config, languages)
+        _result = _configure_linters_interactive(config, languages)
 
         captured = capsys.readouterr()
         assert "Python: not detected" in captured.out

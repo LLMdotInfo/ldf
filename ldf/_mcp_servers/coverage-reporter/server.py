@@ -24,14 +24,13 @@ import fnmatch
 import json
 import logging
 import os
-import re
 import sys
 from pathlib import Path
 from typing import Any
 
+from mcp import types
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
-from mcp import types
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent))

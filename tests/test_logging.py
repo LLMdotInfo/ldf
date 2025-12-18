@@ -1,9 +1,8 @@
 """Tests for ldf.utils.logging module."""
 
 import logging
-import pytest
 
-from ldf.utils.logging import get_logger, configure_logging
+from ldf.utils.logging import configure_logging, get_logger
 
 
 class TestGetLogger:
@@ -94,7 +93,7 @@ class TestLoggerIntegration:
         """Test that child loggers inherit parent level."""
         configure_logging(level="WARNING")
 
-        parent = logging.getLogger("ldf")
+        _parent = logging.getLogger("ldf")  # noqa: F841 - establishes parent logger
         child = get_logger("child_module")
 
         assert child.getEffectiveLevel() == logging.WARNING

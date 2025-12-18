@@ -121,7 +121,6 @@ class CoverageParser:
         """Parse .coverage file using coverage.py API."""
         try:
             from coverage import Coverage
-            from coverage.exceptions import NoDataError
         except ImportError:
             raise RuntimeError("coverage module not found. Install: pip install coverage")
 

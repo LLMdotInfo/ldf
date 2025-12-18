@@ -1,17 +1,15 @@
 """Tests for ldf.convert module."""
 
-import pytest
 from pathlib import Path
 
 from ldf.convert import (
+    LANGUAGE_PATTERNS,
+    SKIP_DIRS,
     ConversionContext,
     ImportResult,
     analyze_existing_codebase,
     generate_backwards_fill_prompt,
     import_backwards_fill,
-    LANGUAGE_PATTERNS,
-    FRAMEWORK_PATTERNS,
-    SKIP_DIRS,
 )
 
 

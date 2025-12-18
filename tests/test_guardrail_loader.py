@@ -1,14 +1,15 @@
 """Tests for ldf.utils.guardrail_loader module."""
 
-import pytest
 from pathlib import Path
 
+import pytest
+
 from ldf.utils.guardrail_loader import (
+    Guardrail,
     get_active_guardrails,
     load_core_guardrails,
-    load_preset_guardrails,
     load_guardrails,
-    Guardrail,
+    load_preset_guardrails,
 )
 
 

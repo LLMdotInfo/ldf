@@ -1,16 +1,12 @@
 """Tests for LDF update functionality."""
 
-import shutil
-from pathlib import Path
 
 import pytest
-import yaml
 
 from ldf import __version__
 from ldf.init import FRAMEWORK_DIR, compute_file_checksum, initialize_project
 from ldf.update import (
     UpdateDiff,
-    UpdateInfo,
     apply_updates,
     check_for_updates,
     get_update_diff,
@@ -102,7 +98,7 @@ class TestGetUpdateDiff:
         """Should detect when user has modified a question pack."""
         # Get the config with checksums
         config = load_project_config(temp_project)
-        original_checksums = config.get("_checksums", {})
+        _original_checksums = config.get("_checksums", {})  # noqa: F841 - stored for reference
 
         # Modify the security question pack
         pack_path = temp_project / ".ldf" / "question-packs" / "security.yaml"
@@ -233,7 +229,7 @@ class TestApplyUpdates:
         custom_content = "# My custom spec\n"
         req_file.write_text(custom_content)
 
-        result = apply_updates(temp_project)
+        _result = apply_updates(temp_project)
 
         # Spec should be untouched
         assert req_file.read_text() == custom_content
@@ -247,7 +243,7 @@ class TestApplyUpdates:
         custom_content = "answers:\n  - question: test\n    answer: yes\n"
         answers_file.write_text(custom_content)
 
-        result = apply_updates(temp_project)
+        _result = apply_updates(temp_project)
 
         # Answerpack should be untouched
         assert answers_file.read_text() == custom_content
@@ -262,7 +258,7 @@ class TestApplyUpdates:
         macro_path.write_text("# Modified\n")
 
         # Only update templates
-        result = apply_updates(temp_project, components=["templates"])
+        _result = apply_updates(temp_project, components=["templates"])
 
         # Template should be updated
         framework_template = (FRAMEWORK_DIR / "templates" / "design.md").read_text()
@@ -278,7 +274,7 @@ class TestApplyUpdates:
         modified_content = "# Modified template\n"
         template_path.write_text(modified_content)
 
-        result = apply_updates(temp_project, dry_run=True)
+        _result = apply_updates(temp_project, dry_run=True)
 
         # File should not be changed
         assert template_path.read_text() == modified_content

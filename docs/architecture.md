@@ -106,10 +106,10 @@ When `ldf update` runs:
 
 ## MCP Server Integration
 
-MCP servers in `mcp-servers/` are standalone Python scripts:
+MCP servers are bundled in the `ldf` package at `ldf/_mcp_servers/`:
 
 ```
-mcp-servers/
+ldf/_mcp_servers/
 ├── spec-inspector/     # Query specs, tasks, guardrail coverage
 ├── coverage-reporter/  # Test coverage metrics
 └── db-inspector/       # Database schema inspection (template)

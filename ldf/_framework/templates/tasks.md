@@ -1,7 +1,7 @@
 # {Feature Name} - Implementation Tasks
 
 ## Per-Task Guardrail Checklist
-**Reference:** `.ldf/guardrails.yaml` | **Macro:** `framework/macros/task-guardrails.md`
+**Reference:** `.ldf/guardrails.yaml` | **Macro:** `.ldf/macros/task-guardrails.md`
 
 Before implementing each task, verify applicable guardrails:
 

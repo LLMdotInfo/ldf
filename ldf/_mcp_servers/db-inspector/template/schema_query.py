@@ -6,9 +6,7 @@ Provides async PostgreSQL queries for schema inspection, RLS policies, and index
 This is a template - customize queries for your specific schema needs.
 """
 
-import asyncio
-from typing import Any, Optional
-from urllib.parse import urlparse
+from typing import Any
 
 import asyncpg
 
@@ -19,7 +17,7 @@ class SchemaQuery:
     def __init__(self, database_url: str):
         """Initialize with database URL."""
         self.database_url = database_url
-        self._pool: Optional[asyncpg.Pool] = None
+        self._pool: asyncpg.Pool | None = None
 
     async def _get_pool(self) -> asyncpg.Pool:
         """Get or create connection pool."""
@@ -34,7 +32,7 @@ class SchemaQuery:
             rows = await conn.fetch(query, *args)
             return [dict(row) for row in rows]
 
-    async def _fetchrow(self, query: str, *args) -> Optional[dict]:
+    async def _fetchrow(self, query: str, *args) -> dict | None:
         """Execute query and return single row as dict."""
         pool = await self._get_pool()
         async with pool.acquire() as conn:
@@ -174,7 +172,7 @@ class SchemaQuery:
 
     async def explain_rls_policy(
         self, table_name: str, policy_name: str, schema: str = "public"
-    ) -> Optional[dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         """
         Get detailed RLS policy definition (USING/CHECK clauses).
 

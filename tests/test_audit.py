@@ -1,9 +1,8 @@
 """Tests for ldf.audit module."""
 
-import pytest
 from pathlib import Path
 
-from ldf.audit import run_audit, _build_audit_request, _redact_content, _generate_audit_request
+from ldf.audit import _build_audit_request, _redact_content, run_audit
 
 
 class TestRedaction:

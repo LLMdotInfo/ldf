@@ -4,7 +4,6 @@ import re
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Any
 
 
 class SpecStatus(Enum):
@@ -123,7 +122,7 @@ def extract_guardrail_matrix(content: str) -> list[GuardrailMatrixRow]:
     Returns:
         List of GuardrailMatrixRow objects
     """
-    rows = []
+    rows: list[GuardrailMatrixRow] = []
 
     # Find the matrix section (allow empty lines after header)
     matrix_match = re.search(
@@ -210,7 +209,7 @@ def extract_tasks(content: str) -> list[TaskItem]:
 
     # Pattern for task headers in two formats:
     # 1. Heading format: "### Task 1.1: Title" or "### 1.1: Title" (Task keyword optional)
-    # 2. Checklist format: "- [ ] **Task 1.1:** Title" or "- [ ] Task 1.1: Title" (Task keyword required)
+    # 2. Checklist format: "- [ ] **Task 1.1:** Title" or "- [ ] Task 1.1: Title"
     # Supports subtasks: Task 1.1.1, Task 2.3.2, etc.
     # Requires heading markers or checkbox markers to avoid matching inline references
     # For checklist format, bold markers (**) are optional, and indentation is allowed

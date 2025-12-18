@@ -16,7 +16,6 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
 
 try:
     from openai import AsyncOpenAI
@@ -48,7 +47,7 @@ class AuditResult:
     risk_level: str  # LOW, MEDIUM, HIGH, CRITICAL
     issues: list[AuditIssue] = field(default_factory=list)
     raw_response: str = ""
-    error: Optional[str] = None
+    error: str | None = None
 
 
 class ChatGPTAuditor:
@@ -56,10 +55,10 @@ class ChatGPTAuditor:
 
     def __init__(
         self,
-        api_key: Optional[str] = None,
+        api_key: str | None = None,
         model: str = "gpt-4o",
         max_tokens: int = 4000,
-        prompts_dir: Optional[Path] = None,
+        prompts_dir: Path | None = None,
     ):
         """
         Initialize ChatGPT auditor.
@@ -97,7 +96,7 @@ class ChatGPTAuditor:
         self,
         spec_content: str,
         prompt_type: str,
-        context: Optional[str] = None,
+        context: str | None = None,
     ) -> AuditResult:
         """
         Send spec to ChatGPT for audit.

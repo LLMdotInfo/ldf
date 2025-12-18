@@ -1,15 +1,16 @@
 """Tests for ldf.utils.config module."""
 
-import pytest
 from pathlib import Path
 
+import pytest
+
 from ldf.utils.config import (
-    load_config,
-    get_config_value,
-    get_specs_dir,
     get_answerpacks_dir,
-    get_templates_dir,
+    get_config_value,
     get_default_config,
+    get_specs_dir,
+    get_templates_dir,
+    load_config,
     save_config,
 )
 

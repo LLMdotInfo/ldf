@@ -166,7 +166,10 @@ def init(
     if repair:
         detection = detect_project_state(project_path)
         if detection.state == ProjectState.NEW:
-            console.print("[yellow]No existing LDF setup to repair. Running full initialization.[/yellow]")
+            console.print(
+                "[yellow]No existing LDF setup to repair. "
+                "Running full initialization.[/yellow]"
+            )
         elif detection.state in (ProjectState.PARTIAL, ProjectState.LEGACY):
             console.print("[yellow]Repairing LDF setup...[/yellow]")
             repair_project(project_path)
@@ -427,9 +430,15 @@ def mcp_config(root: Path | None, server: tuple, output_format: str):
 
 @main.command()
 @click.option("--service", "-s", help="Service name for service-specific coverage")
-@click.option("--guardrail", "-g", type=int, help="Show coverage info for a specific guardrail (informational)")
-@click.option("--validate", is_flag=True, help="Exit with error code if coverage below threshold (for CI)")
-@click.option("--verbose", "-v", is_flag=True, help="Show detailed per-file coverage breakdown")
+@click.option(
+    "--guardrail", "-g", type=int,
+    help="Show coverage info for a specific guardrail (informational)",
+)
+@click.option(
+    "--validate", is_flag=True,
+    help="Exit with error code if coverage below threshold (for CI)",
+)
+@click.option("--verbose", "-v", is_flag=True, help="Show detailed per-file breakdown")
 def coverage(service: str | None, guardrail: int | None, validate: bool, verbose: bool):
     """Check test coverage against guardrail requirements.
 
@@ -557,8 +566,14 @@ def status(json_output: bool):
         if specs:
             console.print()
             console.print(f"[bold]Specs:[/bold] {len(specs)} found")
+            status_icons = {
+                "tasks": "[green]tasks[/green]",
+                "design": "[yellow]design[/yellow]",
+                "requirements": "[blue]req[/blue]",
+                "empty": "[dim]empty[/dim]",
+            }
             for spec in specs[:5]:
-                status_icon = {"tasks": "[green]tasks[/green]", "design": "[yellow]design[/yellow]", "requirements": "[blue]req[/blue]", "empty": "[dim]empty[/dim]"}.get(spec["status"], spec["status"])
+                status_icon = status_icons.get(str(spec["status"]), str(spec["status"]))
                 console.print(f"  - {spec['name']} ({status_icon})")
             if len(specs) > 5:
                 console.print(f"  [dim]... and {len(specs) - 5} more[/dim]")

@@ -7,6 +7,7 @@ import shutil
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
+from typing import cast
 
 import yaml
 
@@ -123,14 +124,10 @@ def check_for_updates(project_root: Path) -> UpdateInfo:
     ldf_dir = project_root / ".ldf"
 
     for component_name, component_info in COMPONENTS.items():
-        if component_name == "question-packs":
-            dest_dir = ldf_dir / component_info["dest"]
-            if dest_dir.exists():
-                updatable_components.append(component_name)
-        else:
-            dest_dir = ldf_dir / component_info["dest"]
-            if dest_dir.exists():
-                updatable_components.append(component_name)
+        dest = cast(str, component_info["dest"])
+        dest_dir = ldf_dir / dest
+        if dest_dir.exists():
+            updatable_components.append(component_name)
 
     return UpdateInfo(
         current_version=current_version,
@@ -157,7 +154,7 @@ def _is_file_modified(project_root: Path, relative_path: str, config: dict) -> b
         return True
 
     current_checksum = compute_file_checksum(file_path)
-    return current_checksum != original_checksum
+    return bool(current_checksum != original_checksum)
 
 
 def get_update_diff(
@@ -184,17 +181,17 @@ def get_update_diff(
             continue
 
         component_info = COMPONENTS[component_name]
-        strategy = component_info["strategy"]
+        _strategy = component_info["strategy"]  # noqa: F841 - reserved for future use
 
         if component_name == "question-packs":
             # Special handling for question packs
             _diff_question_packs(project_root, config, diff)
         else:
             # Handle templates and macros
-            source_dir = component_info["source"]
-            dest_dir = ldf_dir / component_info["dest"]
+            source_dir = cast(Path, component_info["source"])
+            dest_dir = ldf_dir / cast(str, component_info["dest"])
 
-            for filename in component_info["files"]:
+            for filename in cast(list[str], component_info["files"]):
                 source_file = source_dir / filename
                 dest_file = dest_dir / filename
                 relative_path = f"{component_info['dest']}/{filename}"
@@ -465,7 +462,9 @@ def print_update_diff(diff: UpdateDiff, dry_run: bool = False) -> None:
 
     for path in diff.files_unchanged:
         component = path.split("/")[0]
-        by_component.setdefault(component, []).append(f"  [dim]=[/dim] {path} [dim](no changes)[/dim]")
+        by_component.setdefault(component, []).append(
+            f"  [dim]=[/dim] {path} [dim](no changes)[/dim]"
+        )
 
     # Print by component
     for component in sorted(by_component.keys()):

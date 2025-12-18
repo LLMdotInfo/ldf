@@ -1,6 +1,5 @@
 """Tests for ldf.lint module."""
 
-import pytest
 from pathlib import Path
 
 from ldf.lint import lint_specs

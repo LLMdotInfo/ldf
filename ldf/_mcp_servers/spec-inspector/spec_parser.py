@@ -5,9 +5,10 @@ Parses spec markdown files (requirements.md, design.md, tasks.md) and YAML answe
 """
 
 import re
-import yaml
 from pathlib import Path
 from typing import Any
+
+import yaml
 
 # Status normalization maps for consistent status values
 STATUS_SYNONYMS = {

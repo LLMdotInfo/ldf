@@ -16,7 +16,6 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
 
 try:
     import google.generativeai as genai
@@ -48,7 +47,7 @@ class AuditResult:
     risk_level: str  # LOW, MEDIUM, HIGH, CRITICAL
     issues: list[AuditIssue] = field(default_factory=list)
     raw_response: str = ""
-    error: Optional[str] = None
+    error: str | None = None
 
 
 class GeminiAuditor:
@@ -56,10 +55,10 @@ class GeminiAuditor:
 
     def __init__(
         self,
-        api_key: Optional[str] = None,
+        api_key: str | None = None,
         model: str = "gemini-pro",
         max_tokens: int = 4000,
-        prompts_dir: Optional[Path] = None,
+        prompts_dir: Path | None = None,
     ):
         """
         Initialize Gemini auditor.
@@ -102,7 +101,7 @@ class GeminiAuditor:
         self,
         spec_content: str,
         prompt_type: str,
-        context: Optional[str] = None,
+        context: str | None = None,
     ) -> AuditResult:
         """
         Send spec to Gemini for audit.

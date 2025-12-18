@@ -74,12 +74,21 @@ target-version = ["py310"]
 [tool.ruff]
 line-length = 100
 target-version = "py310"
+
+[tool.ruff.lint]
 select = ["E", "F", "I", "N", "W", "UP"]
+
+[tool.ruff.lint.per-file-ignores]
+# Allow longer lines in tests, MCP servers, and multi-agent automation
+"tests/*" = ["E501"]
+"ldf/_mcp_servers/*" = ["E501"]
+"multi-agent/*" = ["E501"]
 
 [tool.mypy]
 python_version = "3.10"
 warn_return_any = true
 warn_unused_configs = true
+exclude = ["ldf/_mcp_servers/"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

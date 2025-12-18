@@ -1,7 +1,8 @@
 """Tests for ldf.cli module."""
 
-import pytest
 from pathlib import Path
+
+import pytest
 from click.testing import CliRunner
 
 from ldf.cli import main as cli

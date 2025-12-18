@@ -126,7 +126,7 @@ jobs:
   #   2. Configure .ldf/config.yaml with audit_api section:
   #      audit_api:
   #        chatgpt:
-  #          provider: openai
+  #          api_key: ${OPENAI_API_KEY}
   #          model: gpt-4o
   automated-audit:
     name: Automated Spec Audit

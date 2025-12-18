@@ -2,12 +2,11 @@
 
 import stat
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from jinja2 import Template
 
 from ldf.utils.config import load_config, save_config
-
 
 # Marker to identify LDF-managed hooks
 LDF_HOOK_MARKER = "# LDF Pre-Commit Hook - Auto-generated"
@@ -76,7 +75,7 @@ def get_hook_config(project_root: Path | None = None) -> dict[str, Any]:
     """
     try:
         config = load_config(project_root)
-        return config.get("hooks", get_default_hooks_config())
+        return cast(dict[str, Any], config.get("hooks", get_default_hooks_config()))
     except FileNotFoundError:
         return get_default_hooks_config()
 

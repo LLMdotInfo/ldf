@@ -1,15 +1,14 @@
 """Tests for ldf.coverage module."""
 
 import json
-import pytest
 from pathlib import Path
 
 from ldf.coverage import (
-    report_coverage,
-    _find_coverage_data,
-    _try_generate_coverage,
-    _normalize_coverage_data,
     _filter_by_service,
+    _find_coverage_data,
+    _normalize_coverage_data,
+    _try_generate_coverage,
+    report_coverage,
 )
 
 
@@ -219,7 +218,7 @@ class TestReportCoverage:
         coverage_file.write_text(json.dumps(sample_pytest_coverage_json))
         monkeypatch.chdir(temp_project)
 
-        result = report_coverage(project_root=temp_project, service="auth")
+        _result = report_coverage(project_root=temp_project, service="auth")
 
         captured = capsys.readouterr()
         assert "Filtered to service: auth" in captured.out
@@ -351,7 +350,7 @@ class TestCoverageVerboseFlag:
         coverage_file.write_text(json.dumps(coverage_data))
         monkeypatch.chdir(temp_project)
 
-        result = report_coverage(project_root=temp_project, verbose=True)
+        _result = report_coverage(project_root=temp_project, verbose=True)
 
         captured = capsys.readouterr()
         # Verbose should show all 15 files
@@ -369,7 +368,7 @@ class TestCoverageGuardrailFilter:
         coverage_file.write_text(json.dumps(sample_pytest_coverage_json))
         monkeypatch.chdir(temp_project)
 
-        result = report_coverage(project_root=temp_project, guardrail_id=1)
+        _result = report_coverage(project_root=temp_project, guardrail_id=1)
 
         captured = capsys.readouterr()
         assert "guardrail" in captured.out.lower()
@@ -418,7 +417,7 @@ class TestGenerateReportAdvanced:
         coverage_file.write_text(json.dumps(coverage_data))
         monkeypatch.chdir(temp_project)
 
-        result = report_coverage(project_root=temp_project)
+        _result = report_coverage(project_root=temp_project)
 
         captured = capsys.readouterr()
         assert "more files" in captured.out

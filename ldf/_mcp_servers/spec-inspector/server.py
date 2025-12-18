@@ -34,15 +34,15 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from mcp import types
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
-from mcp import types
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent))
 
-from spec_parser import SpecParser
 from guardrail_tracker import GuardrailTracker
+from spec_parser import SpecParser
 
 # Configure logging
 logging.basicConfig(

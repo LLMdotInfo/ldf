@@ -24,13 +24,11 @@ LDF provides two MCP servers that give your AI assistant real-time access to you
 ### 1. Install Dependencies
 
 ```bash
-cd your-project
+# MCP servers are bundled with ldf - just install ldf
+pip install ldf
 
-# Install spec-inspector dependencies
-pip install -r mcp-servers/spec-inspector/requirements.txt
-
-# Install coverage-reporter dependencies
-pip install -r mcp-servers/coverage-reporter/requirements.txt
+# Or install with MCP extras for the mcp library
+pip install ldf[mcp]
 ```
 
 ### 2. Configure Your AI Tool

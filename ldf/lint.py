@@ -5,14 +5,13 @@ from pathlib import Path
 
 from rich.table import Table
 
-from ldf.utils.config import load_config, get_specs_dir
+from ldf.utils.config import get_specs_dir, load_config
 from ldf.utils.console import console
-from ldf.utils.guardrail_loader import get_active_guardrails, Guardrail
+from ldf.utils.guardrail_loader import Guardrail, get_active_guardrails
 from ldf.utils.spec_parser import (
-    parse_spec,
-    SpecInfo,
     extract_guardrail_matrix,
     extract_tasks,
+    parse_spec,
 )
 
 
@@ -51,7 +50,10 @@ def lint_specs(
         if ci_mode:
             print("✅ Pass: No specs directory found.")
         else:
-            console.print("[yellow]No specs directory found. Create specs with '/project:create-spec'.[/yellow]")
+            console.print(
+                "[yellow]No specs directory found. "
+                "Create specs with '/project:create-spec'.[/yellow]"
+            )
         return 0
 
     # Load configuration
@@ -235,7 +237,7 @@ def _lint_spec(
         for warning in warnings:
             console.print(f"  [yellow]WARN[/yellow] {warning}")
         if not errors and not warnings:
-            console.print(f"  [green]PASSED[/green]")
+            console.print("  [green]PASSED[/green]")
 
     # In strict mode, treat warnings as errors
     if strict_mode:
@@ -292,8 +294,8 @@ def _check_design(filepath: Path, guardrails: list[Guardrail]) -> tuple[list[str
     Returns:
         Tuple of (errors, warnings)
     """
-    errors = []
-    warnings = []
+    errors: list[str] = []
+    warnings: list[str] = []
     content = filepath.read_text()
 
     # Check for Guardrail Mapping section
@@ -392,7 +394,9 @@ def _check_answerpacks(spec_path: Path) -> tuple[list[str], list[str]]:
     return errors, warnings
 
 
-def _validate_guardrail_matrix(content: str, guardrails: list[Guardrail]) -> tuple[list[str], list[str]]:
+def _validate_guardrail_matrix(
+    content: str, guardrails: list[Guardrail]
+) -> tuple[list[str], list[str]]:
     """Validate the guardrail coverage matrix against active guardrails.
 
     Args:
@@ -402,8 +406,8 @@ def _validate_guardrail_matrix(content: str, guardrails: list[Guardrail]) -> tup
     Returns:
         Tuple of (errors, warnings)
     """
-    errors = []
-    warnings = []
+    errors: list[str] = []
+    warnings: list[str] = []
 
     matrix = extract_guardrail_matrix(content)
 
@@ -421,7 +425,9 @@ def _validate_guardrail_matrix(content: str, guardrails: list[Guardrail]) -> tup
                 for row in matrix
             )
             if not name_match:
-                errors.append(f"Guardrail #{guardrail.id} ({guardrail.name}) not in coverage matrix")
+                errors.append(
+                    f"Guardrail #{guardrail.id} ({guardrail.name}) not in coverage matrix"
+                )
 
     # Validate each matrix row
     for row in matrix:

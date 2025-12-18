@@ -74,7 +74,7 @@ def get_specs_dir(project_root: Path | None = None) -> Path:
         project_root = Path.cwd()
 
     specs_dir = get_config_value("project.specs_dir", ".ldf/specs", project_root)
-    return project_root / specs_dir
+    return project_root / str(specs_dir)
 
 
 def get_answerpacks_dir(project_root: Path | None = None) -> Path:

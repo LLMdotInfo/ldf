@@ -5,8 +5,11 @@ Real-time queries for spec status, guardrail coverage, and task dependencies wit
 ## Installation
 
 ```bash
-cd mcp-servers/spec-inspector
-pip install -r requirements.txt
+# MCP servers are bundled with ldf - just install ldf
+pip install ldf
+
+# Or install with MCP extras
+pip install ldf[mcp]
 ```
 
 ## Configuration

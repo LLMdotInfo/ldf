@@ -2,9 +2,7 @@
 
 from pathlib import Path
 
-import pytest
-
-from ldf.spec import create_spec, list_specs, get_spec_path
+from ldf.spec import create_spec, get_spec_path, list_specs
 
 
 class TestCreateSpec:

@@ -4,9 +4,7 @@ import hashlib
 import shutil
 from datetime import datetime
 from pathlib import Path
-from typing import Any
 
-import questionary
 import yaml
 from rich.panel import Panel
 from rich.prompt import Confirm
@@ -181,7 +179,7 @@ def _create_directories(ldf_dir: Path) -> None:
     ]
     for d in dirs:
         d.mkdir(parents=True, exist_ok=True)
-    console.print(f"  [green]✓[/green] Created .ldf/ directory structure")
+    console.print("  [green]✓[/green] Created .ldf/ directory structure")
 
 
 def _create_config(
@@ -219,12 +217,12 @@ def _create_config(
     config_path = ldf_dir / "config.yaml"
     with open(config_path, "w") as f:
         yaml.safe_dump(config, f, default_flow_style=False, sort_keys=False)
-    console.print(f"  [green]✓[/green] Created config.yaml")
+    console.print("  [green]✓[/green] Created config.yaml")
 
 
 def _create_guardrails(ldf_dir: Path, preset: str) -> None:
     """Create the guardrails configuration file."""
-    guardrails = {
+    guardrails: dict[str, str | list[str] | dict[str, str] | None] = {
         "extends": "core",
         "preset": preset if preset != "custom" else None,
         "overrides": {},
@@ -287,7 +285,7 @@ def _copy_templates(ldf_dir: Path) -> None:
         if source.exists():
             shutil.copy(source, dest_dir / template)
 
-    console.print(f"  [green]✓[/green] Copied spec templates")
+    console.print("  [green]✓[/green] Copied spec templates")
 
 
 def _copy_macros(ldf_dir: Path) -> None:
@@ -302,7 +300,7 @@ def _copy_macros(ldf_dir: Path) -> None:
         if source.exists():
             shutil.copy(source, dest_dir / macro)
 
-    console.print(f"  [green]✓[/green] Copied enforcement macros")
+    console.print("  [green]✓[/green] Copied enforcement macros")
 
 
 def _create_claude_md(project_root: Path, preset: str, question_packs: list[str]) -> None:
@@ -429,10 +427,10 @@ ldf audit --type spec-review  # Generate audit for other AI
             # Backup existing
             backup_path = project_root / "CLAUDE.md.backup"
             shutil.copy(claude_md_path, backup_path)
-            console.print(f"  [yellow]![/yellow] Backed up existing CLAUDE.md to CLAUDE.md.backup")
+            console.print("  [yellow]![/yellow] Backed up existing CLAUDE.md to CLAUDE.md.backup")
 
     claude_md_path.write_text(content)
-    console.print(f"  [green]✓[/green] Created CLAUDE.md")
+    console.print("  [green]✓[/green] Created CLAUDE.md")
 
 
 def _create_claude_commands(project_root: Path) -> None:
@@ -578,7 +576,7 @@ def _create_claude_commands(project_root: Path) -> None:
 
     (commands_dir / "review-spec.md").write_text(review_spec_cmd)
 
-    console.print(f"  [green]✓[/green] Created .claude/commands/")
+    console.print("  [green]✓[/green] Created .claude/commands/")
 
 
 def _print_summary(
@@ -600,7 +598,7 @@ def _print_summary(
     console.print(f"  Question packs: [cyan]{', '.join(question_packs)}[/cyan]")
     console.print(f"  MCP servers: [cyan]{', '.join(mcp_servers)}[/cyan]")
     if hooks_installed:
-        console.print(f"  Pre-commit hooks: [green]installed[/green]")
+        console.print("  Pre-commit hooks: [green]installed[/green]")
 
     console.print("\n[bold]Created files:[/bold]")
     console.print("  .ldf/")
@@ -619,9 +617,13 @@ def _print_summary(
     console.print("\n[bold]Next steps:[/bold]")
     console.print("  1. Review [cyan].ldf/config.yaml[/cyan] and customize as needed")
     console.print("  2. Review [cyan]CLAUDE.md[/cyan] and update project-specific sections")
-    console.print("  3. Run [cyan]/project:create-spec <feature-name>[/cyan] to create your first spec")
+    console.print(
+        "  3. Run [cyan]/project:create-spec <feature-name>[/cyan] to create your first spec"
+    )
     if not hooks_installed:
-        console.print("  4. (Optional) Run [cyan]ldf hooks install[/cyan] to add pre-commit validation")
+        console.print(
+            "  4. (Optional) Run [cyan]ldf hooks install[/cyan] to add pre-commit validation"
+        )
     console.print()
 
 

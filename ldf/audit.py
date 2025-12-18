@@ -11,9 +11,17 @@ from ldf.utils.console import console
 # Patterns to redact when include_secrets=False
 REDACTION_PATTERNS = [
     # PEM private keys (multiline) - must be first to catch entire blocks
-    (r'-----BEGIN[A-Z ]*PRIVATE KEY-----[\s\S]*?-----END[A-Z ]*PRIVATE KEY-----', '[PEM_KEY_REDACTED]'),
+    (
+        r"-----BEGIN[A-Z ]*PRIVATE KEY-----[\s\S]*?-----END[A-Z ]*PRIVATE KEY-----",
+        "[PEM_KEY_REDACTED]",
+    ),
     # PEM certificates and other sensitive blocks
-    (r'-----BEGIN[A-Z ]*(?:PRIVATE|SECRET|ENCRYPTED)[A-Z ]*-----[\s\S]*?-----END[A-Z ]*(?:PRIVATE|SECRET|ENCRYPTED)[A-Z ]*-----', '[PEM_BLOCK_REDACTED]'),
+    (
+        r"-----BEGIN[A-Z ]*(?:PRIVATE|SECRET|ENCRYPTED)[A-Z ]*-----"
+        r"[\s\S]*?"
+        r"-----END[A-Z ]*(?:PRIVATE|SECRET|ENCRYPTED)[A-Z ]*-----",
+        "[PEM_BLOCK_REDACTED]",
+    ),
 
     # JWTs (header.payload.signature - base64url encoded)
     (r'\beyJ[A-Za-z0-9_-]*\.eyJ[A-Za-z0-9_-]*\.[A-Za-z0-9_-]+\b', '[JWT_REDACTED]'),
@@ -31,7 +39,11 @@ REDACTION_PATTERNS = [
     (r'\bnpm_[A-Za-z0-9]{36,}\b', '[NPM_TOKEN_REDACTED]'),
 
     # API keys, secrets, passwords, tokens with values (key=value or key: value patterns)
-    (r'(?i)(api[_-]?key|secret|password|token|credential|auth)["\']?\s*[:=]\s*["\']?[^\s"\']{8,}', r'\1=[REDACTED]'),
+    (
+        r'(?i)(api[_-]?key|secret|password|token|credential|auth)'
+        r'["\']?\s*[:=]\s*["\']?[^\s"\']{8,}',
+        r"\1=[REDACTED]",
+    ),
 
     # Prefixed API keys (sk-, pk-, api_, etc.)
     (r'(?i)\b(sk|pk|api|key|secret|token)[_-][a-zA-Z0-9\-_]{16,}\b', '[API_KEY_REDACTED]'),
@@ -40,8 +52,12 @@ REDACTION_PATTERNS = [
     (r'(?i)bearer\s+[a-zA-Z0-9\-._~+/]{20,}=*', 'Bearer [REDACTED]'),
 
     # AWS-style keys
-    (r'(?i)(aws[_-]?(?:access[_-]?key|secret)[_-]?(?:id)?)\s*[:=]\s*["\']?[A-Z0-9]{16,}', r'\1=[REDACTED]'),
-    (r'\bAKIA[A-Z0-9]{16}\b', '[AWS_ACCESS_KEY_REDACTED]'),
+    (
+        r"(?i)(aws[_-]?(?:access[_-]?key|secret)[_-]?(?:id)?)"
+        r'\s*[:=]\s*["\']?[A-Z0-9]{16,}',
+        r"\1=[REDACTED]",
+    ),
+    (r"\bAKIA[A-Z0-9]{16}\b", "[AWS_ACCESS_KEY_REDACTED]"),
 
     # Base64-encoded secrets (long base64 that looks like credentials - 64+ chars)
     (r'(?<=["\':=\s])[A-Za-z0-9+/]{64,}={0,2}(?=["\'\s,\n]|$)', '[BASE64_REDACTED]'),
@@ -53,7 +69,11 @@ REDACTION_PATTERNS = [
     (r'\$\{?(?:SECRET|TOKEN|PASSWORD|API_KEY|CREDENTIALS)[_A-Z]*\}?', '[ENV_VAR_REDACTED]'),
 
     # Generic private/secret JSON keys with long values
-    (r'(?i)"[^"]*(?:private|secret|password|token|key|credential)[^"]*"\s*:\s*"[^"]{20,}"', '"[SENSITIVE_KEY]": "[REDACTED]"'),
+    (
+        r'(?i)"[^"]*(?:private|secret|password|token|key|credential)[^"]*"'
+        r'\s*:\s*"[^"]{20,}"',
+        '"[SENSITIVE_KEY]": "[REDACTED]"',
+    ),
 ]
 
 
@@ -101,7 +121,10 @@ def run_audit(
         _import_feedback(Path(import_file))
     elif audit_type:
         if use_api and agent:
-            _run_api_audit(audit_type, agent, auto_import, include_secrets, skip_confirm, spec_name, output_format)
+            _run_api_audit(
+                audit_type, agent, auto_import, include_secrets,
+                skip_confirm, spec_name, output_format,
+            )
         elif use_api:
             if output_format == "json":
                 import json
@@ -148,7 +171,7 @@ def _run_api_audit(
     import asyncio
     import json
 
-    from ldf.audit_api import run_api_audit, save_audit_response, load_api_config
+    from ldf.audit_api import load_api_config, run_api_audit, save_audit_response
 
     # Check if API is configured
     configs = load_api_config()
@@ -255,7 +278,8 @@ audit_api:
     else:
         # Summary
         successful = sum(1 for r in all_responses if r.success)
-        console.print(f"\n[bold]Audit complete:[/bold] {successful}/{len(all_responses)} successful")
+        total = len(all_responses)
+        console.print(f"\n[bold]Audit complete:[/bold] {successful}/{total} successful")
 
         if successful > 0:
             console.print("\nNext steps:")
@@ -330,7 +354,8 @@ def _generate_audit_request(
         spec_path = specs_dir / spec_name
         if not spec_path.exists() or not spec_path.is_dir():
             console.print(f"[red]Error: Spec '{spec_name}' not found.[/red]")
-            console.print(f"[dim]Available specs: {', '.join(d.name for d in specs_dir.iterdir() if d.is_dir())}[/dim]")
+            available = ", ".join(d.name for d in specs_dir.iterdir() if d.is_dir())
+            console.print(f"[dim]Available specs: {available}[/dim]")
             return None
         specs = [spec_path]
     else:
@@ -370,11 +395,14 @@ def _generate_audit_request(
 
     console.print(f"[green]Generated: {output_path}[/green]")
     if not include_secrets:
-        console.print("[dim]Note: Sensitive content was redacted. Use --include-secrets to include.[/dim]")
+        console.print(
+            "[dim]Note: Sensitive content was redacted. "
+            "Use --include-secrets to include.[/dim]"
+        )
     console.print("\nNext steps:")
     console.print("  1. Copy the content of this file")
     console.print("  2. Paste into ChatGPT or Gemini with the appropriate prompt")
-    console.print(f"  3. Save the response and run: ldf audit --import feedback.md")
+    console.print("  3. Save the response and run: ldf audit --import feedback.md")
     console.print("\nOr use API automation:")
     console.print(f"  ldf audit --type {audit_type} --api --agent chatgpt")
 

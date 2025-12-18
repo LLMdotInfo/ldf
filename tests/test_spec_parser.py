@@ -1,15 +1,12 @@
 """Tests for ldf.utils.spec_parser module."""
 
-import pytest
 from pathlib import Path
 
 from ldf.utils.spec_parser import (
-    parse_spec,
+    SpecStatus,
     extract_guardrail_matrix,
     extract_tasks,
-    SpecStatus,
-    GuardrailMatrixRow,
-    TaskItem,
+    parse_spec,
 )
 
 

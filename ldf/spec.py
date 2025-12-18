@@ -1,9 +1,8 @@
 """LDF spec management."""
 
-import shutil
 from pathlib import Path
 
-from ldf.utils.config import get_specs_dir, get_answerpacks_dir, get_templates_dir
+from ldf.utils.config import get_answerpacks_dir, get_specs_dir, get_templates_dir
 from ldf.utils.console import console
 
 
@@ -68,8 +67,11 @@ def create_spec(name: str, project_root: Path | None = None) -> bool:
             console.print(f"[green]✓[/green] Created {template_name}")
         else:
             # Create minimal file if template doesn't exist
-            dest_path.write_text(f"# {name} - {template_name.replace('.md', '').title()}\n\nTODO: Fill in this section.\n")
-            console.print(f"[yellow]![/yellow] Created minimal {template_name} (template not found)")
+            section_title = template_name.replace('.md', '').title()
+            dest_path.write_text(f"# {name} - {section_title}\n\nTODO: Fill in this section.\n")
+            console.print(
+                f"[yellow]![/yellow] Created minimal {template_name} (template not found)"
+            )
 
     # Create answerpacks directory
     answerpack_dir = answerpacks_dir / name
@@ -88,7 +90,7 @@ def create_spec(name: str, project_root: Path | None = None) -> bool:
     console.print()
     console.print(f"  2. Validate with: [cyan]ldf lint {name}[/cyan]")
     console.print()
-    console.print(f"  3. Continue to design and tasks phases")
+    console.print("  3. Continue to design and tasks phases")
     console.print()
 
     return True

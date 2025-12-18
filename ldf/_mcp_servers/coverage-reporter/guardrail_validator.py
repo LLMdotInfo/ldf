@@ -5,9 +5,10 @@ Maps guardrails to test patterns and validates coverage.
 Works with configurable guardrails from .ldf/guardrails.yaml.
 """
 
-import yaml
 from pathlib import Path
 from typing import Any
+
+import yaml
 
 
 class GuardrailCoverageValidator:
@@ -81,8 +82,8 @@ class GuardrailCoverageValidator:
     def _find_core_guardrails_file(self) -> Path | None:
         """Find core.yaml guardrails file."""
         candidates = [
-            self.project_root / ".ldf" / "framework" / "guardrails" / "core.yaml",
-            Path(__file__).parent.parent.parent / "framework" / "guardrails" / "core.yaml",
+            self.project_root / ".ldf" / "_framework" / "guardrails" / "core.yaml",
+            Path(__file__).parent.parent.parent / "_framework" / "guardrails" / "core.yaml",
         ]
         for candidate in candidates:
             if candidate.exists():
@@ -92,8 +93,8 @@ class GuardrailCoverageValidator:
     def _find_preset_file(self, preset: str) -> Path | None:
         """Find preset guardrails file."""
         candidates = [
-            self.project_root / ".ldf" / "framework" / "guardrails" / "presets" / f"{preset}.yaml",
-            Path(__file__).parent.parent.parent / "framework" / "guardrails" / "presets" / f"{preset}.yaml",
+            self.project_root / ".ldf" / "_framework" / "guardrails" / "presets" / f"{preset}.yaml",
+            Path(__file__).parent.parent.parent / "_framework" / "guardrails" / "presets" / f"{preset}.yaml",
         ]
         for candidate in candidates:
             if candidate.exists():

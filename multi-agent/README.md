@@ -184,5 +184,5 @@ For production features: yes. For prototypes or experiments: use judgment.
 ## Related
 
 - [LDF Getting Started](../docs/getting-started.md)
-- [Spec Templates](../framework/templates/)
-- [Guardrails Reference](../framework/guardrails/)
+- [Spec Templates](../ldf/_framework/templates/)
+- [Guardrails Reference](../ldf/_framework/guardrails/)

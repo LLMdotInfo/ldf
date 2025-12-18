@@ -5,8 +5,11 @@ Real-time test coverage metrics per service/guardrail without requiring your AI 
 ## Installation
 
 ```bash
-cd mcp-servers/coverage-reporter
-pip install -r requirements.txt
+# MCP servers are bundled with ldf - just install ldf
+pip install ldf
+
+# Or install with MCP extras
+pip install ldf[mcp]
 ```
 
 ## Configuration

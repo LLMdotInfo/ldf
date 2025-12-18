@@ -6,10 +6,10 @@ Works with configurable guardrails from .ldf/guardrails.yaml.
 """
 
 import re
-import yaml
 from pathlib import Path
 from typing import Any
 
+import yaml
 from spec_parser import SpecParser
 
 
@@ -18,10 +18,10 @@ def load_active_guardrails(project_root: Path) -> list[dict[str, Any]]:
     guardrails = []
 
     # Load core guardrails from framework
-    framework_core = project_root / ".ldf" / "framework" / "guardrails" / "core.yaml"
+    framework_core = project_root / ".ldf" / "_framework" / "guardrails" / "core.yaml"
     if not framework_core.exists():
         # Try package location
-        framework_core = Path(__file__).parent.parent.parent / "framework" / "guardrails" / "core.yaml"
+        framework_core = Path(__file__).parent.parent.parent / "_framework" / "guardrails" / "core.yaml"
 
     if framework_core.exists():
         with open(framework_core) as f:
@@ -39,9 +39,9 @@ def load_active_guardrails(project_root: Path) -> list[dict[str, Any]]:
         # Load preset guardrails
         preset = config.get("preset")
         if preset and preset != "custom":
-            preset_file = project_root / ".ldf" / "framework" / "guardrails" / "presets" / f"{preset}.yaml"
+            preset_file = project_root / ".ldf" / "_framework" / "guardrails" / "presets" / f"{preset}.yaml"
             if not preset_file.exists():
-                preset_file = Path(__file__).parent.parent.parent / "framework" / "guardrails" / "presets" / f"{preset}.yaml"
+                preset_file = Path(__file__).parent.parent.parent / "_framework" / "guardrails" / "presets" / f"{preset}.yaml"
 
             if preset_file.exists():
                 with open(preset_file) as f:

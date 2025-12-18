@@ -186,8 +186,8 @@ def analyze_existing_codebase(project_root: Path) -> ConversionContext:
         if fpath.exists():
             try:
                 content = fpath.read_text(errors="ignore").lower()
-                for framework, patterns in FRAMEWORK_PATTERNS.items():
-                    if any(p.lower() in content for p in patterns):
+                for framework, keywords in FRAMEWORK_PATTERNS.items():
+                    if any(p.lower() in content for p in keywords):
                         if framework not in ctx.detected_frameworks:
                             ctx.detected_frameworks.append(framework)
             except Exception:
@@ -214,7 +214,7 @@ def analyze_existing_codebase(project_root: Path) -> ConversionContext:
     # Pick highest scoring preset (or custom if none match)
     max_score = max(preset_scores.values())
     if max_score > 0:
-        ctx.suggested_preset = max(preset_scores, key=preset_scores.get)
+        ctx.suggested_preset = max(preset_scores, key=lambda p: preset_scores[p])
     else:
         ctx.suggested_preset = "custom"
 
@@ -267,8 +267,8 @@ and we need to document the design decisions that were made.
 ## Project Information
 
 **Project Root:** {context.project_root}
-**Languages Detected:** {', '.join(context.detected_languages) if context.detected_languages else 'Unknown'}
-**Frameworks Detected:** {', '.join(context.detected_frameworks) if context.detected_frameworks else 'None identified'}
+**Languages Detected:** {', '.join(context.detected_languages) or 'Unknown'}
+**Frameworks Detected:** {', '.join(context.detected_frameworks) or 'None identified'}
 **Suggested Preset:** {context.suggested_preset or 'custom'}
 **Suggested Question Packs:** {', '.join(context.suggested_question_packs)}
 

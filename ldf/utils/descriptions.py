@@ -6,7 +6,7 @@ formatted access for different contexts (CLI, documentation, etc.).
 
 from functools import lru_cache
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import yaml
 
@@ -29,7 +29,7 @@ def load_descriptions() -> dict[str, Any]:
         raise FileNotFoundError(f"Descriptions file not found: {DESCRIPTIONS_PATH}")
 
     with open(DESCRIPTIONS_PATH) as f:
-        return yaml.safe_load(f)
+        return cast(dict[str, Any], yaml.safe_load(f) or {})
 
 
 def get_preset_info(preset_name: str) -> dict[str, Any]:
@@ -42,7 +42,8 @@ def get_preset_info(preset_name: str) -> dict[str, Any]:
         Dictionary with short, description, extra_guardrails, recommended_packs, why_matters
     """
     descriptions = load_descriptions()
-    return descriptions.get("presets", {}).get(preset_name, {})
+    presets = cast(dict[str, dict[str, Any]], descriptions.get("presets", {}))
+    return presets.get(preset_name, {})
 
 
 def get_preset_short(preset_name: str) -> str:
@@ -55,7 +56,7 @@ def get_preset_short(preset_name: str) -> str:
         Short description string
     """
     info = get_preset_info(preset_name)
-    return info.get("short", preset_name)
+    return str(info.get("short", preset_name))
 
 
 def get_preset_extra_guardrails(preset_name: str) -> str:
@@ -68,7 +69,7 @@ def get_preset_extra_guardrails(preset_name: str) -> str:
         Extra guardrails string (e.g., "+5 (RLS, tenancy, billing, audit, export)")
     """
     info = get_preset_info(preset_name)
-    return info.get("extra_guardrails", "+0")
+    return str(info.get("extra_guardrails", "+0"))
 
 
 def get_preset_recommended_packs(preset_name: str) -> list[str]:
@@ -81,7 +82,7 @@ def get_preset_recommended_packs(preset_name: str) -> list[str]:
         List of recommended question pack names
     """
     info = get_preset_info(preset_name)
-    return info.get("recommended_packs", [])
+    return cast(list[str], info.get("recommended_packs", []))
 
 
 def get_all_presets() -> list[str]:
@@ -104,7 +105,8 @@ def get_pack_info(pack_name: str) -> dict[str, Any]:
         Dictionary with short, description, is_core, critical, use_when
     """
     descriptions = load_descriptions()
-    return descriptions.get("question_packs", {}).get(pack_name, {})
+    packs = cast(dict[str, dict[str, Any]], descriptions.get("question_packs", {}))
+    return packs.get(pack_name, {})
 
 
 def get_pack_short(pack_name: str) -> str:
@@ -117,7 +119,7 @@ def get_pack_short(pack_name: str) -> str:
         Short description string
     """
     info = get_pack_info(pack_name)
-    return info.get("short", pack_name)
+    return str(info.get("short", pack_name))
 
 
 def is_core_pack(pack_name: str) -> bool:
@@ -130,7 +132,7 @@ def is_core_pack(pack_name: str) -> bool:
         True if core pack (always included), False otherwise
     """
     info = get_pack_info(pack_name)
-    return info.get("is_core", False)
+    return bool(info.get("is_core", False))
 
 
 def get_core_packs() -> list[str]:
@@ -165,7 +167,8 @@ def get_mcp_server_info(server_name: str) -> dict[str, Any]:
         Dictionary with short, description, default, why_matters
     """
     descriptions = load_descriptions()
-    return descriptions.get("mcp_servers", {}).get(server_name, {})
+    servers = cast(dict[str, dict[str, Any]], descriptions.get("mcp_servers", {}))
+    return servers.get(server_name, {})
 
 
 def get_mcp_server_short(server_name: str) -> str:
@@ -178,7 +181,7 @@ def get_mcp_server_short(server_name: str) -> str:
         Short description string
     """
     info = get_mcp_server_info(server_name)
-    return info.get("short", server_name)
+    return str(info.get("short", server_name))
 
 
 def is_mcp_server_default(server_name: str) -> bool:
@@ -191,7 +194,7 @@ def is_mcp_server_default(server_name: str) -> bool:
         True if default enabled, False otherwise
     """
     info = get_mcp_server_info(server_name)
-    return info.get("default", False)
+    return bool(info.get("default", False))
 
 
 def get_all_mcp_servers() -> list[str]:
@@ -214,7 +217,8 @@ def get_term_info(term: str) -> dict[str, Any]:
         Dictionary with full_name, short, description, example, why_matters
     """
     descriptions = load_descriptions()
-    return descriptions.get("glossary", {}).get(term, {})
+    glossary = cast(dict[str, dict[str, Any]], descriptions.get("glossary", {}))
+    return glossary.get(term, {})
 
 
 def get_term_explanation(term: str) -> str:
@@ -229,11 +233,11 @@ def get_term_explanation(term: str) -> str:
     info = get_term_info(term)
     if not info:
         return term
-    full_name = info.get("full_name", "")
-    short = info.get("short", "")
+    full_name = str(info.get("full_name", ""))
+    short = str(info.get("short", ""))
     if full_name and short:
         return f"{term} ({full_name}) - {short}"
-    return info.get("short", term)
+    return str(info.get("short", term))
 
 
 def format_preset_choice(preset_name: str) -> str:

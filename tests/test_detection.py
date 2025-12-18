@@ -1,18 +1,14 @@
 """Tests for ldf.detection module."""
 
-import pytest
-import yaml
-from pathlib import Path
 
 from ldf import __version__
 from ldf.detection import (
-    ProjectState,
-    DetectionResult,
-    detect_project_state,
-    check_ldf_completeness,
-    get_specs_summary,
-    REQUIRED_FILES,
     REQUIRED_DIRS,
+    DetectionResult,
+    ProjectState,
+    check_ldf_completeness,
+    detect_project_state,
+    get_specs_summary,
 )
 
 

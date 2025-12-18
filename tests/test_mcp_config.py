@@ -3,9 +3,7 @@
 import json
 from pathlib import Path
 
-import pytest
-
-from ldf.mcp_config import get_mcp_servers_dir, generate_mcp_config
+from ldf.mcp_config import generate_mcp_config, get_mcp_servers_dir
 
 
 class TestGetMcpServersDir:

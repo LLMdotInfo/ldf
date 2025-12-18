@@ -401,7 +401,7 @@ The linter will validate that dependencies exist and detect circular dependencie
 
 - [Getting Started Guide](getting-started.md) - Quick start with LDF
 - [Concepts](concepts.md) - Understanding the three-phase workflow
-- [Template: tasks.md](../framework/templates/tasks.md) - Official template
+- [Template: tasks.md](../ldf/_framework/templates/tasks.md) - Official template
 
 ## Troubleshooting
 

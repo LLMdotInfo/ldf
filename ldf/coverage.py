@@ -10,7 +10,7 @@ from typing import Any
 from rich.panel import Panel
 from rich.table import Table
 
-from ldf.utils.config import load_config, get_specs_dir
+from ldf.utils.config import load_config
 from ldf.utils.console import console
 from ldf.utils.guardrail_loader import get_active_guardrails, get_guardrail_by_id
 
@@ -45,7 +45,7 @@ def report_coverage(
 
     # Load configuration
     try:
-        config = load_config(project_root)
+        _config = load_config(project_root)  # noqa: F841 - validates config exists
     except FileNotFoundError:
         console.print("[red]Error: Could not load LDF configuration.[/red]")
         return {"status": "ERROR", "error": "Config not found"}
@@ -108,7 +108,10 @@ def report_coverage(
         if report["status"] == "PASS":
             console.print("\n[green]✓ Coverage validation passed[/green]")
         else:
-            console.print(f"\n[red]✗ Coverage validation failed: {report['coverage_percent']:.1f}% < {default_threshold}%[/red]")
+            pct = report['coverage_percent']
+            console.print(
+                f"\n[red]✗ Coverage validation failed: {pct:.1f}% < {default_threshold}%[/red]"
+            )
 
     return report
 
@@ -180,7 +183,9 @@ def _try_generate_coverage(project_root: Path) -> dict[str, Any] | None:
 
     # Check coverage tool is installed
     if not shutil.which("coverage"):
-        console.print("[yellow]Coverage tool not found. Install with: pip install coverage[/yellow]")
+        console.print(
+            "[yellow]Coverage tool not found. Install with: pip install coverage[/yellow]"
+        )
         return None
 
     # Check .ldf directory exists and is writable
@@ -382,9 +387,13 @@ def _display_report(report: dict[str, Any], verbose: bool = False) -> None:
     threshold = report["threshold_default"]
 
     if report["status"] == "PASS":
-        console.print(f"[bold green]Coverage: {percent:.1f}%[/bold green] (threshold: {threshold}%)")
+        console.print(
+            f"[bold green]Coverage: {percent:.1f}%[/bold green] (threshold: {threshold}%)"
+        )
     else:
-        console.print(f"[bold red]Coverage: {percent:.1f}%[/bold red] (threshold: {threshold}%)")
+        console.print(
+            f"[bold red]Coverage: {percent:.1f}%[/bold red] (threshold: {threshold}%)"
+        )
 
     console.print(f"Lines: {report['lines_covered']}/{report['lines_total']}")
 
@@ -419,7 +428,8 @@ def _display_report(report: dict[str, Any], verbose: bool = False) -> None:
         console.print(table)
 
         if not verbose and len(report["files"]) > 10:
-            console.print(f"[dim]... and {len(report['files']) - 10} more files (use --verbose to show all)[/dim]")
+            extra = len(report['files']) - 10
+            console.print(f"[dim]... and {extra} more files (use --verbose to show all)[/dim]")
 
     # Guardrail status
     console.print()
@@ -427,5 +437,5 @@ def _display_report(report: dict[str, Any], verbose: bool = False) -> None:
         console.print("[green]Guardrail #1 (Testing Coverage): SATISFIED[/green]")
     else:
         gap = threshold - percent
-        console.print(f"[red]Guardrail #1 (Testing Coverage): NOT SATISFIED[/red]")
+        console.print("[red]Guardrail #1 (Testing Coverage): NOT SATISFIED[/red]")
         console.print(f"[dim]Need {gap:.1f}% more coverage to meet threshold[/dim]")

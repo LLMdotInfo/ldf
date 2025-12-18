@@ -1,18 +1,15 @@
 """Tests for ldf/audit_api.py - API integration for automated audits."""
 
-from pathlib import Path
-from unittest.mock import patch, MagicMock, AsyncMock
-import pytest
 
 from ldf.audit_api import (
     AuditConfig,
     AuditResponse,
     ChatGPTAuditor,
     GeminiAuditor,
-    load_api_config,
-    get_auditor,
-    save_audit_response,
     _resolve_env_var,
+    get_auditor,
+    load_api_config,
+    save_audit_response,
 )
 
 

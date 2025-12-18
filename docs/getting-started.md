@@ -423,7 +423,7 @@ This creates `.claude/mcp.json` with the correct paths to LDF's MCP servers conf
 - **spec-inspector**: Query spec status, guardrail coverage, task progress
 - **coverage-reporter**: Test coverage metrics per service/guardrail
 
-See [MCP Setup Guide](../mcp-servers/MCP_SETUP.md) for advanced configuration options.
+See [MCP Setup Guide](../ldf/_mcp_servers/MCP_SETUP.md) for advanced configuration options.
 
 ## Workflow Summary
 

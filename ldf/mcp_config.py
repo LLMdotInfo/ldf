@@ -2,6 +2,7 @@
 
 import json
 from pathlib import Path
+from typing import Any
 
 
 def get_mcp_servers_dir() -> Path:
@@ -60,6 +61,7 @@ def generate_mcp_config(
         config = available_servers
 
     # Format output
+    output: dict[str, Any]
     if output_format == "claude":
         output = {"mcpServers": config}
     else:

@@ -50,7 +50,9 @@ class BaseAuditor(ABC):
         self.config = config
 
     @abstractmethod
-    async def audit(self, prompt: str, audit_type: str, spec_name: str | None = None) -> AuditResponse:
+    async def audit(
+        self, prompt: str, audit_type: str, spec_name: str | None = None
+    ) -> AuditResponse:
         """Run an audit with the given prompt.
 
         Args:
@@ -77,7 +79,9 @@ class ChatGPTAuditor(BaseAuditor):
     def provider_name(self) -> str:
         return "chatgpt"
 
-    async def audit(self, prompt: str, audit_type: str, spec_name: str | None = None) -> AuditResponse:
+    async def audit(
+        self, prompt: str, audit_type: str, spec_name: str | None = None
+    ) -> AuditResponse:
         """Run an audit using OpenAI's ChatGPT API."""
         timestamp = datetime.now().isoformat()
         errors: list[str] = []
@@ -85,7 +89,7 @@ class ChatGPTAuditor(BaseAuditor):
         try:
             # Import openai only when needed (optional dependency)
             try:
-                import openai
+                import openai  # type: ignore[import-not-found]
             except ImportError:
                 return AuditResponse(
                     success=False,
@@ -94,7 +98,10 @@ class ChatGPTAuditor(BaseAuditor):
                     spec_name=spec_name,
                     content="",
                     timestamp=timestamp,
-                    errors=["OpenAI package not installed. Install with: pip install 'ldf[automation]'"],
+                    errors=[
+                        "OpenAI package not installed. "
+                        "Install with: pip install 'ldf[automation]'"
+                    ],
                 )
 
             client = openai.AsyncOpenAI(api_key=self.config.api_key)
@@ -174,7 +181,9 @@ class GeminiAuditor(BaseAuditor):
     def provider_name(self) -> str:
         return "gemini"
 
-    async def audit(self, prompt: str, audit_type: str, spec_name: str | None = None) -> AuditResponse:
+    async def audit(
+        self, prompt: str, audit_type: str, spec_name: str | None = None
+    ) -> AuditResponse:
         """Run an audit using Google's Gemini API."""
         timestamp = datetime.now().isoformat()
         errors: list[str] = []
@@ -182,7 +191,7 @@ class GeminiAuditor(BaseAuditor):
         try:
             # Import google.generativeai only when needed (optional dependency)
             try:
-                import google.generativeai as genai
+                import google.generativeai as genai  # type: ignore[import-not-found]
             except ImportError:
                 return AuditResponse(
                     success=False,
@@ -191,7 +200,10 @@ class GeminiAuditor(BaseAuditor):
                     spec_name=spec_name,
                     content="",
                     timestamp=timestamp,
-                    errors=["Google Generative AI package not installed. Install with: pip install 'ldf[automation]'"],
+                    errors=[
+                        "Google Generative AI package not installed. "
+                        "Install with: pip install 'ldf[automation]'"
+                    ],
                 )
 
             genai.configure(api_key=self.config.api_key)
@@ -386,7 +398,10 @@ async def run_api_audit(
             spec_name=spec_name,
             content="",
             timestamp=datetime.now().isoformat(),
-            errors=[f"Provider '{provider}' not configured. Add audit_api.{provider} to .ldf/config.yaml"],
+            errors=[
+                f"Provider '{provider}' not configured. "
+                f"Add audit_api.{provider} to .ldf/config.yaml"
+            ],
         )
 
     console.print(f"[blue]Running {audit_type} audit with {provider}...[/blue]")
@@ -439,7 +454,7 @@ def save_audit_response(response: AuditResponse, project_root: Path | None = Non
 """
 
     if response.errors:
-        content += f"\n\n## Errors\n\n"
+        content += "\n\n## Errors\n\n"
         for error in response.errors:
             content += f"- {error}\n"
 
