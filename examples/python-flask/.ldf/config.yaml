@@ -1,0 +1,26 @@
+# LDF Configuration for Python/Flask Example
+version: "1.0"
+
+project:
+  name: flask-blog-example
+  description: Example Flask blog API project with LDF specs
+
+specs:
+  directory: specs
+
+guardrails:
+  preset: core
+  custom: []
+
+question_packs:
+  - security
+  - testing
+  - api-design
+  - data-model
+
+coverage:
+  default_threshold: 80
+  critical_threshold: 90
+  critical_services:
+    - blog
+    - auth

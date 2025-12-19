@@ -1,0 +1,27 @@
+# LDF Configuration for Python/Django Example
+version: "1.0"
+
+project:
+  name: django-ecommerce-example
+  description: Example Django e-commerce API project with LDF specs
+
+specs:
+  directory: specs
+
+guardrails:
+  preset: saas
+  custom: []
+
+question_packs:
+  - security
+  - testing
+  - api-design
+  - data-model
+
+coverage:
+  default_threshold: 80
+  critical_threshold: 90
+  critical_services:
+    - products
+    - orders
+    - payments
