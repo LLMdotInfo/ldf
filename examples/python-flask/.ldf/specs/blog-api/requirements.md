@@ -208,16 +208,16 @@ Blog API system for the Flask application allowing users to create, read, update
 
 ## Guardrail Coverage Matrix
 
-| # | Guardrail | Applicable | Covered By | Notes |
-|---|-----------|------------|------------|-------|
-| 1 | Testing Coverage | ✅ Yes | All tasks | 85% overall, 90% routes, 95% services |
-| 2 | Security Basics | ✅ Yes | Tasks 1.1, 2.x, 3.x | JWT auth, input validation, XSS prevention |
-| 3 | Error Handling | ✅ Yes | Task 1.2, all routes | Consistent error responses, proper HTTP codes |
-| 4 | Logging & Observability | ✅ Yes | Task 1.3 | Structured logging with context |
-| 5 | API Design | ✅ Yes | Task 2.x | Versioned (/v1/), paginated, consistent errors |
-| 6 | Data Validation | ✅ Yes | Task 2.x, 3.x | Marshmallow schemas, business rules |
-| 7 | Database Migrations | ✅ Yes | Task 1.4 | Alembic migrations, reversible |
-| 8 | Documentation | ✅ Yes | Task 4.x | API docs, inline comments, README |
+| Guardrail | Requirements | Design | Tasks/Tests | Owner | Status |
+|-----------|--------------|--------|-------------|-------|--------|
+| 1. Testing Coverage | [US-1..7] | [S8.1, S8.2] | [T-5.1] | @dev | TODO |
+| 2. Security Basics | [US-1..7] | [S7.1, S7.2, S7.3] | [T-4.1, T-4.2] | @dev | TODO |
+| 3. Error Handling | [US-1..7] | [S5.1, S5.2] | [T-3.4] | @dev | TODO |
+| 4. Logging & Observability | [All] | [S10.1] | [T-1.2] | @dev | TODO |
+| 5. API Design | [US-1..7] | [S3.1, S3.2] | [T-3.2, T-3.3] | @dev | TODO |
+| 6. Data Validation | [US-1..7] | [S6.1] | [T-3.1] | @dev | TODO |
+| 7. Database Migrations | [All] | [S9.2] | [T-1.3] | @dev | TODO |
+| 8. Documentation | [All] | [S10] | [T-5.2, T-5.3] | @dev | TODO |
 
 ## Success Metrics
 

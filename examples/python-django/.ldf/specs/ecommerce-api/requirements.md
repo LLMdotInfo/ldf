@@ -247,18 +247,18 @@ E-commerce API for product catalog management, shopping cart, and order processi
 
 ## Guardrail Coverage Matrix
 
-| # | Guardrail | Applicable | Covered By | Notes |
-|---|-----------|------------|------------|-------|
-| 1 | Testing Coverage | ✅ Yes | All tasks | 85% overall, 90% models/views, 95% critical |
-| 2 | Security Basics | ✅ Yes | Tasks 1.x, 2.x, 3.x | JWT auth, input validation, permission checks |
-| 3 | Error Handling | ✅ Yes | Task 2.x | DRF exception handling, custom exceptions |
-| 4 | Logging & Observability | ✅ Yes | Task 1.3 | Django logging, transaction logging |
-| 5 | API Design | ✅ Yes | Task 2.x | Versioned (/v1/), cursor pagination, DRF standards |
-| 6 | Data Validation | ✅ Yes | Task 2.x, 3.x | DRF serializers, custom validators |
-| 7 | Database Migrations | ✅ Yes | Task 1.4 | Django migrations, reversible |
-| 8 | Documentation | ✅ Yes | Task 4.x | API docs with drf-spectacular, README |
-| 9 | Multi-tenancy | ✅ Yes | Task 3.x | Vendor isolation, row-level security |
-| 10 | Audit Logs | ✅ Yes | Task 3.4 | Order access logs, vendor action logs |
+| Guardrail | Requirements | Design | Tasks/Tests | Owner | Status |
+|-----------|--------------|--------|-------------|-------|--------|
+| 1. Testing Coverage | [US-1..8] | [S7.1, S7.2] | [T-7.2] | @dev | TODO |
+| 2. Security Basics | [US-3..8] | [S6] | [T-6.1, T-6.2] | @dev | TODO |
+| 3. Error Handling | [US-1..8] | [S2.1, S2.2, S2.3] | [T-3.2, T-4.2] | @dev | TODO |
+| 4. Logging & Observability | [All] | [S5.1] | [T-5.1] | @dev | TODO |
+| 5. API Design | [US-1..8] | [S3.1, S3.2, S4] | [T-4.1, T-4.2, T-4.3] | @dev | TODO |
+| 6. Data Validation | [US-1..8] | [S2.1, S2.2, S2.3] | [T-3.1, T-3.2] | @dev | TODO |
+| 7. Database Migrations | [All] | [S1.1] | [T-1.3] | @dev | TODO |
+| 8. Documentation | [All] | [S8] | [T-7.1, T-7.3] | @dev | TODO |
+| 9. Multi-tenancy | [US-7, US-8] | [S6] | [T-6.1] | @dev | TODO |
+| 10. Audit Logs | [US-6, US-7] | [S5.1] | [T-5.1] | @dev | TODO |
 
 ## Success Metrics
 

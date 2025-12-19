@@ -492,6 +492,19 @@ flask db migrate -m "Create posts table"
 flask db upgrade
 ```
 
+## Guardrail Mapping
+
+| Guardrail | Implementation | Section |
+|-----------|---------------|---------|
+| 1. Testing Coverage | Unit + Integration tests with pytest | S8.1, S8.2 |
+| 2. Security Basics | JWT auth, input sanitization, rate limiting | S7.1, S7.2, S7.3, S7.4 |
+| 3. Error Handling | Custom exceptions, consistent error format | S5.1, S5.2 |
+| 4. Logging & Observability | Structured logging with request IDs | S10.1 |
+| 5. API Design | Versioned /api/v1/, pagination, consistent responses | S3.1, S3.2 |
+| 6. Data Validation | Marshmallow schemas with validators | S6.1 |
+| 7. Database Migrations | Alembic reversible migrations | S9.2 |
+| 8. Documentation | API docs, inline comments, README | S10.2 |
+
 ## S10: Observability
 
 ### S10.1: Logging

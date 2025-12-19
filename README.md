@@ -271,12 +271,19 @@ ldf/
 See the `examples/` directory for complete working examples:
 
 - **[Python FastAPI](examples/python-fastapi/)** - User authentication with JWT, MFA
+- **[Python Flask](examples/python-flask/)** - Blog API with SQLAlchemy, Blueprints
+- **[Python Django](examples/python-django/)** - E-commerce API with DRF, multi-tenancy
 - **[TypeScript Node](examples/typescript-node/)** - REST API with Prisma, Zod validation
+- **[Go Service](examples/go-service/)** - Data pipeline with Chi router
+
+### Recommended Additional Examples
+
+See [examples/RECOMMENDATIONS.md](examples/RECOMMENDATIONS.md) for proposals on 5 additional framework examples (Rust, Java, Ruby, C#, PHP) to expand the collection to 10 total templates.
 
 Each example includes:
 - `.ldf/` configuration
 - Complete spec (requirements → design → tasks)
-- `CLAUDE.md` project instructions
+- `AGENT.md` project instructions
 
 ## Documentation
 

@@ -507,6 +507,21 @@ class ProductAPITest(APITestCase):
         self.assertEqual(response.status_code, 201)
 ```
 
+## Guardrail Mapping
+
+| Guardrail | Implementation | Section |
+|-----------|---------------|---------|
+| 1. Testing Coverage | Model + API + Service tests with pytest-django | S7.1, S7.2 |
+| 2. Security Basics | JWT auth, permissions, rate limiting | S6 |
+| 3. Error Handling | DRF exception handlers, custom exceptions | S2.1, S2.2, S2.3 |
+| 4. Logging & Observability | Django logging with transaction IDs | S5.1 |
+| 5. API Design | DRF ViewSets, cursor pagination, versioned URLs | S3.1, S3.2, S4 |
+| 6. Data Validation | DRF serializers with custom validators | S2.1, S2.2, S2.3 |
+| 7. Database Migrations | Django reversible migrations | S1.1 |
+| 8. Documentation | drf-spectacular OpenAPI docs | S8 |
+| 9. Multi-tenancy | Vendor isolation via permissions | S6 |
+| 10. Audit Logs | Order/vendor action logging | S5.1 |
+
 ## S8: Admin Configuration
 
 **Location:** `products/admin.py`
