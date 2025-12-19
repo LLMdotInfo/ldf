@@ -8,6 +8,8 @@
 
 **Reference:** `.ldf/guardrails.yaml`
 
+**Mark N/A if not applicable to the task.**
+
 Before implementing each task, verify applicable guardrails:
 
 - [ ] **1. Testing Coverage:** Unit tests for business logic; integration tests for APIs; coverage ≥85%
@@ -18,8 +20,6 @@ Before implementing each task, verify applicable guardrails:
 - [ ] **6. Data Validation:** Request schema validation; business rule validation; output sanitization
 - [ ] **7. Database Migrations:** Reversible migrations; rollback tested; backfills separate from schema
 - [ ] **8. Documentation:** API docs updated; inline comments for complex logic; README current
-
-**Mark N/A if not applicable to the task.**
 
 ---
 

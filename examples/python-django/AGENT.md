@@ -288,11 +288,16 @@ from django.db import migrations
 
 def forward(apps, schema_editor):
     Product = apps.get_model('products', 'Product')
-    # Data migration logic
+    Category = apps.get_model('products', 'Category')
+    # Example: Set default category for existing products
+    default_cat = Category.objects.create(name='Uncategorized', slug='uncategorized')
+    Product.objects.filter(category__isnull=True).update(category=default_cat)
 
 def backward(apps, schema_editor):
-    # Rollback logic
-    pass
+    # Rollback: Remove the default category and clear assignments
+    Category = apps.get_model('products', 'Category')
+    Category.objects.filter(slug='uncategorized').delete()
+    # Products will have NULL category after this (if nullable)
 
 class Migration(migrations.Migration):
     dependencies = [

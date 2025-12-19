@@ -503,7 +503,15 @@ class ProductAPITest(APITestCase):
     
     def test_create_product_authenticated(self):
         self.client.force_authenticate(user=self.vendor)
-        response = self.client.post('/api/v1/products/', data={...})
+        category = Category.objects.create(name='Electronics', slug='electronics')
+        data = {
+            'name': 'New Product',
+            'description': 'Test product',
+            'price': 29.99,
+            'stock_quantity': 10,
+            'category': category.id
+        }
+        response = self.client.post('/api/v1/products/', data)
         self.assertEqual(response.status_code, 201)
 ```
 

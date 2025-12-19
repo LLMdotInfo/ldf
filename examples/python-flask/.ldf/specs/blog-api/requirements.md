@@ -31,7 +31,7 @@ Blog API system for the Flask application allowing users to create, read, update
 **Acceptance Criteria:**
 - [ ] AC-2.1: Only post author can publish
 - [ ] AC-2.2: Published posts get published_at timestamp
-- [ ] AC-2.3: Cannot unpublish (status change is one-way)
+- [ ] AC-2.3: Cannot unpublish (status change is one-way; see design for admin override)
 - [ ] AC-2.4: Returns 404 if post not found
 - [ ] AC-2.5: Returns 403 if user is not the author
 
