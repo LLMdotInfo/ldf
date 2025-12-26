@@ -1,0 +1,26 @@
+feature_name: "user-auth"
+pack: "api-design"
+answered_at: "2025-01-15T10:00:00Z"
+
+answers:
+  style:
+    type: "REST"
+    base_path: "/api/v1/auth"
+
+  versioning:
+    strategy: "URL path versioning"
+
+  endpoints:
+    - "POST /register - Create account"
+    - "POST /login - Authenticate"
+    - "POST /logout - End session"
+    - "POST /refresh - Refresh tokens"
+    - "POST /mfa/enroll - Start MFA setup"
+    - "POST /mfa/verify - Complete MFA setup"
+    - "DELETE /mfa - Disable MFA"
+
+  error_format:
+    structure: '{"error": {"code": "AUTH_INVALID_CREDENTIALS", "message": "..."}}'
+
+  pagination:
+    strategy: "Not applicable for auth endpoints"

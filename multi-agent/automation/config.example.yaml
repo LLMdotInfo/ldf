@@ -1,0 +1,44 @@
+# LDF Multi-Agent Automation Configuration
+#
+# Add this audit_api section to your existing .ldf/config.yaml
+# Do NOT replace your entire config.yaml - merge this section in.
+#
+# DO NOT commit config.yaml with real API keys!
+# Use environment variables instead: ${VAR_NAME}
+
+# Add this section to your .ldf/config.yaml:
+audit_api:
+  # OpenAI/ChatGPT Configuration
+  chatgpt:
+    # API key from environment variable (recommended)
+    api_key: ${OPENAI_API_KEY}
+    # Or hardcode (not recommended): api_key: sk-...
+
+    # Model to use
+    model: gpt-4
+    # Alternative models: gpt-4o, gpt-4-turbo, gpt-3.5-turbo
+
+    # Maximum response tokens
+    max_tokens: 4096
+
+    # Request timeout in seconds
+    timeout: 120
+
+  # Google/Gemini Configuration
+  gemini:
+    # API key from environment variable (recommended)
+    api_key: ${GOOGLE_API_KEY}
+
+    # Model to use
+    model: gemini-pro
+    # Alternative: gemini-pro-vision for image analysis
+
+    # Maximum response tokens
+    max_tokens: 4096
+
+    # Request timeout in seconds
+    timeout: 120
+
+# Example usage:
+#   ldf audit --type spec-review --api --agent chatgpt
+#   ldf audit --type security --api --agent gemini --auto-import

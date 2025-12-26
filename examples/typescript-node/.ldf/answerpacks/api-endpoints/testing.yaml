@@ -1,0 +1,21 @@
+feature_name: "api-endpoints"
+pack: "testing"
+answered_at: "2025-01-15T10:00:00Z"
+
+answers:
+  coverage:
+    api_routes: "85% minimum"
+    service_layer: "90% minimum"
+    overall: "80% minimum"
+
+  test_types:
+    unit: "TaskService methods"
+    integration: "API endpoints with supertest"
+    e2e: "Complete flows"
+
+  mocking:
+    strategy: "Mock Prisma client for unit tests"
+    tools: "jest.mock"
+
+  test_data:
+    strategy: "Factory fixtures for tasks"

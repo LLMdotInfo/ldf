@@ -1,0 +1,23 @@
+feature_name: "user-auth"
+pack: "data-model"
+answered_at: "2025-01-15T10:00:00Z"
+
+answers:
+  database:
+    type: "PostgreSQL"
+    orm: "SQLAlchemy 2.0"
+    migrations: "Alembic"
+
+  tables:
+    users: "id, email, password_hash, mfa_secret, created_at, updated_at"
+    refresh_tokens: "id, user_id, token_hash, expires_at, revoked_at"
+    login_attempts: "id, email, success, ip_address, created_at"
+
+  indexes:
+    - "users(email) UNIQUE"
+    - "refresh_tokens(token_hash)"
+    - "login_attempts(email, created_at)"
+
+  id_strategy: "UUID"
+  timestamp_handling: "UTC with timezone"
+  soft_deletes: "No"

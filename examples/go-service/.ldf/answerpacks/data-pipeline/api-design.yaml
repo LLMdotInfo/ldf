@@ -1,0 +1,29 @@
+feature_name: "data-pipeline"
+pack: "api-design"
+answered_at: "2025-01-15T10:00:00Z"
+
+answers:
+  style:
+    type: "REST"
+    base_path: "/api/v1"
+
+  versioning:
+    strategy: "URL path versioning"
+
+  endpoints:
+    - "POST /pipelines - Create pipeline"
+    - "GET /pipelines - List pipelines"
+    - "GET /pipelines/{id} - Get pipeline"
+    - "PUT /pipelines/{id} - Update pipeline"
+    - "DELETE /pipelines/{id} - Delete pipeline"
+    - "POST /pipelines/{id}/start - Start pipeline"
+    - "POST /pipelines/{id}/stop - Stop pipeline"
+    - "POST /pipelines/{id}/batches - Submit batch"
+    - "GET /pipelines/{id}/batches - List batches"
+    - "GET /pipelines/{id}/batches/{batchId} - Get batch status"
+
+  error_format:
+    structure: '{"error": {"code": "PIPELINE_NOT_FOUND", "message": "..."}}'
+
+  pagination:
+    strategy: "Offset-based with limit"

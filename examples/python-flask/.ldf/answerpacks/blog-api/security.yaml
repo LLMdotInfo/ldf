@@ -1,0 +1,22 @@
+feature_name: "blog-api"
+pack: "security"
+answered_at: "2025-01-15T10:00:00Z"
+
+answers:
+  authentication:
+    method: "JWT tokens via Flask-JWT-Extended"
+    rationale: "Stateless authentication, integrates well with Flask"
+
+  authorization:
+    model: "Resource-based (only authors can modify their posts)"
+    implementation: "Decorator functions checking user_id == post.author_id"
+
+  input_validation:
+    method: "Flask-Marshmallow schemas with validation"
+    sanitization: "HTML tags stripped from content (Bleach library)"
+    xss_prevention: "Content sanitization"
+
+  rate_limiting:
+    create_post: "10 per hour per user"
+    add_comment: "30 per hour per user"
+    read_operations: "1000 per hour per IP"

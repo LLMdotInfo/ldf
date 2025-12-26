@@ -1,0 +1,27 @@
+feature_name: "ecommerce-api"
+pack: "testing"
+answered_at: "2025-01-15T10:00:00Z"
+
+answers:
+  coverage:
+    overall: "85%"
+    models: "90%"
+    views_serializers: "90%"
+    critical_paths: "95% (checkout, inventory)"
+
+  test_types:
+    unit: "Models, serializers, utility functions"
+    integration: "API endpoints with test database"
+    e2e: "Full user flows (browse, cart, checkout)"
+
+  test_data:
+    fixtures: "pytest-django fixtures for users, products"
+    factory: "factory_boy for test data generation"
+    isolation: "TransactionTestCase for database isolation"
+
+  critical_paths:
+    - "Complete checkout flow"
+    - "Inventory management (stock updates)"
+    - "Vendor authorization (product ownership)"
+    - "Cart persistence"
+    - "Price calculations"

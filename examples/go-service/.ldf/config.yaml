@@ -1,0 +1,30 @@
+_schema_version: '1.1'
+project:
+  name: data-pipeline-service
+  version: 1.0.0
+  specs_dir: .ldf/specs
+ldf:
+  version: 1.0.0
+  preset: api-only
+question_packs:
+  core:
+  - security
+  - testing
+  - api-design
+  - data-model
+  optional: []
+mcp_servers:
+  enabled: true
+  servers:
+  - spec_inspector
+  - coverage_reporter
+defaults:
+  coverage_target: 80
+  strict_mode: false
+coverage:
+  default_threshold: 80
+  critical_threshold: 90
+lint:
+  strict: false
+  auto_fix: false
+guardrails_overrides: {}

@@ -1,0 +1,31 @@
+feature_name: "ecommerce-api"
+pack: "api-design"
+answered_at: "2025-01-15T10:00:00Z"
+
+answers:
+  style:
+    type: "REST"
+    base_path: "/api/v1"
+
+  versioning:
+    strategy: "URL prefix versioning"
+    deprecation: "6-month notice for version removal"
+
+  pagination:
+    method: "Cursor-based for performance"
+    default_size: 24
+    max_size: 100
+    format: "DRF standard with next/previous URLs"
+
+  error_format:
+    structure: '{"error": {"code": "INSUFFICIENT_STOCK", "message": "...", "details": {...}}}'
+
+  status_codes:
+    success_get: 200
+    created: 201
+    no_content: 204
+    bad_request: 400
+    unauthorized: 401
+    forbidden: 403
+    not_found: 404
+    conflict: 409

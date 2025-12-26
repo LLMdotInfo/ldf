@@ -1,0 +1,21 @@
+feature_name: "data-pipeline"
+pack: "security"
+answered_at: "2025-01-15T10:00:00Z"
+
+answers:
+  authentication:
+    method: "API key in X-API-Key header"
+    storage: "Keys stored hashed in database"
+    rate_limiting: "Per key"
+
+  authorization:
+    model: "Pipelines scoped to API key owner"
+    multi_tenancy: "No cross-tenant access"
+
+  secrets:
+    management: "Environment variables"
+    sensitive_data: "API keys, database credentials"
+
+  input_validation:
+    method: "Go struct validation"
+    pipeline_config: "Validated before creation"

@@ -1,0 +1,31 @@
+feature_name: "blog-api"
+pack: "api-design"
+answered_at: "2025-01-15T10:00:00Z"
+
+answers:
+  style:
+    type: "REST"
+    base_path: "/api/v1"
+
+  versioning:
+    strategy: "URL prefix versioning"
+    deprecation: "6-month notice"
+
+  pagination:
+    method: "Offset-based (?page=1&per_page=20)"
+    default_size: 20
+    max_size: 100
+    response_fields: "total, page, per_page, has_next, has_prev"
+
+  error_format:
+    structure: '{"error": {"code": "VALIDATION_ERROR", "message": "...", "details": {...}}}'
+
+  status_codes:
+    success: "200 (GET, PUT)"
+    created: "201 (POST)"
+    no_content: "204 (DELETE)"
+    bad_request: 400
+    unauthorized: 401
+    forbidden: 403
+    not_found: 404
+    rate_limited: 429

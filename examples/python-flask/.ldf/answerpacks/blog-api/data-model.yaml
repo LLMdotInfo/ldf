@@ -1,0 +1,29 @@
+feature_name: "blog-api"
+pack: "data-model"
+answered_at: "2025-01-15T10:00:00Z"
+
+answers:
+  database:
+    type: "PostgreSQL"
+    orm: "SQLAlchemy"
+    migrations: "Alembic"
+
+  post_states:
+    - "Draft: Created but not published"
+    - "Published: Visible to all users"
+    - "Deleted: Soft deleted, not visible"
+
+  relationships:
+    user_posts: "One-to-many"
+    post_comments: "One-to-many"
+    user_comments: "One-to-many"
+
+  indexes:
+    - "posts.author_id"
+    - "posts.status"
+    - "posts.published_at"
+    - "comments.post_id"
+    - "tags.post_id"
+
+  timestamps: "created_at, updated_at on all entities; published_at on posts"
+  soft_deletes: "Yes (posts)"

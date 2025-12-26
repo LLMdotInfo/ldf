@@ -1,0 +1,21 @@
+feature_name: "api-endpoints"
+pack: "security"
+answered_at: "2025-01-15T10:00:00Z"
+
+answers:
+  authentication:
+    method: "Bearer token (JWT) in Authorization header"
+    validation: "Middleware validates on all /api/v1/tasks/* routes"
+
+  authorization:
+    strategy: "Resource-based permissions"
+    ownership: "Users can only access their own tasks"
+    multi_tenancy: "No - single tenant"
+
+  secrets:
+    management: "Environment variables"
+    sensitive_data: "JWT secret, database credentials"
+
+  input_validation:
+    method: "Zod schemas for all request bodies"
+    xss_prevention: "Output encoding"

@@ -1,0 +1,25 @@
+feature_name: "api-endpoints"
+pack: "api-design"
+answered_at: "2025-01-15T10:00:00Z"
+
+answers:
+  style:
+    type: "REST"
+    base_path: "/api/v1/tasks"
+
+  versioning:
+    strategy: "URL path versioning"
+
+  endpoints:
+    - "GET /api/v1/tasks - List tasks with pagination"
+    - "POST /api/v1/tasks - Create task"
+    - "PUT /api/v1/tasks/:id - Update task"
+    - "DELETE /api/v1/tasks/:id - Delete task"
+
+  pagination:
+    format: '{"data": [...], "pagination": {"page": 1, "pageSize": 20, "total": 42}}'
+    default_size: 20
+    max_size: 100
+
+  error_format:
+    structure: '{"error": {"code": "TASK_NOT_FOUND", "message": "..."}}'

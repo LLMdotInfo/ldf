@@ -1,0 +1,40 @@
+feature_name: "ecommerce-api"
+pack: "data-model"
+answered_at: "2025-01-15T10:00:00Z"
+
+answers:
+  database:
+    type: "PostgreSQL"
+    orm: "Django ORM"
+    migrations: "Django migrations"
+
+  entities:
+    - "User (extends Django User)"
+    - "Product (catalog items)"
+    - "Category (product categories)"
+    - "CartItem (shopping cart)"
+    - "Order (completed purchases)"
+    - "OrderItem (order line items)"
+
+  relationships:
+    user_products: "One-to-many (as vendor)"
+    product_category: "Many-to-one"
+    user_cart: "One-to-many"
+    user_orders: "One-to-many"
+    order_items: "One-to-many"
+
+  indexes:
+    - "products.vendor_id"
+    - "products.category_id"
+    - "products.is_active"
+    - "products.price"
+    - "cart_items.user_id"
+    - "orders.user_id"
+
+  constraints:
+    - "Product price > 0"
+    - "Stock quantity >= 0"
+    - "Order total matches sum of order items"
+    - "Cart item quantity <= product stock"
+
+  timestamps: "created_at, updated_at on all models"

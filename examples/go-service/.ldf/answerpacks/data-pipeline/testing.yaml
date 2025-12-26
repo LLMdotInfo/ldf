@@ -1,0 +1,22 @@
+feature_name: "data-pipeline"
+pack: "testing"
+answered_at: "2025-01-15T10:00:00Z"
+
+answers:
+  coverage:
+    pipeline_service: "90% minimum"
+    processors: "90% minimum"
+    api_handlers: "80% minimum"
+    overall: "80% minimum"
+
+  test_types:
+    unit: "Processors and service logic"
+    integration: "API endpoints"
+    e2e: "Full pipeline flows"
+
+  mocking:
+    strategy: "Interface-based mocking"
+    tools: "Go testing package, testify"
+
+  test_data:
+    strategy: "Table-driven tests with fixtures"

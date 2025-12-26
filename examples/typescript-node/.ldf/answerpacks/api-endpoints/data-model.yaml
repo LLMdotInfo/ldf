@@ -1,0 +1,20 @@
+feature_name: "api-endpoints"
+pack: "data-model"
+answered_at: "2025-01-15T10:00:00Z"
+
+answers:
+  database:
+    type: "PostgreSQL"
+    orm: "Prisma"
+    migrations: "Prisma Migrate"
+
+  tables:
+    tasks: "id, user_id, title, description, status, due_date, created_at, updated_at"
+
+  indexes:
+    - "tasks(user_id, status)"
+    - "tasks(user_id, due_date)"
+
+  id_strategy: "UUID"
+  timestamp_handling: "UTC with timezone"
+  soft_deletes: "No"

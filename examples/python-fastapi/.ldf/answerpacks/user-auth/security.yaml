@@ -1,0 +1,29 @@
+feature_name: "user-auth"
+pack: "security"
+answered_at: "2025-01-15T10:00:00Z"
+
+answers:
+  authentication:
+    method: "Email/password with bcrypt (cost factor 12)"
+    session_management: "JWT access token (15 min) + refresh token (7 days)"
+    token_storage: "HttpOnly cookies"
+    mfa: "TOTP (RFC 6238), optional for users"
+
+  authorization:
+    strategy: "Resource-based permissions"
+    multi_tenancy: "No - single tenant"
+
+  secrets:
+    management: "Environment variables"
+    sensitive_data: "Passwords, PII (email)"
+
+  input_validation:
+    method: "Pydantic models for all request bodies"
+    xss_prevention: "Framework handles it"
+
+  csrf:
+    protection: "No - token-based auth only"
+
+  rate_limiting:
+    strategy: "Yes - per IP"
+    limits: "5 failed login attempts, 15 minute lockout"

@@ -1,0 +1,25 @@
+feature_name: "blog-api"
+pack: "testing"
+answered_at: "2025-01-15T10:00:00Z"
+
+answers:
+  coverage:
+    overall: "85%"
+    api_routes: "90%"
+    service_layer: "95%"
+
+  test_types:
+    unit: "Service functions, validators, helpers"
+    integration: "API endpoints with test database"
+    e2e: "Full user workflows (create, publish, comment)"
+
+  test_data:
+    fixtures: "pytest fixtures for users and posts"
+    factory: "Factory functions for test data creation"
+    isolation: "Each test uses transaction rollback"
+
+  critical_paths:
+    - "Post creation and publishing flow"
+    - "Authorization checks (author-only operations)"
+    - "Pagination and filtering"
+    - "Soft delete functionality"

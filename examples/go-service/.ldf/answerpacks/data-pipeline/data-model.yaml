@@ -1,0 +1,22 @@
+feature_name: "data-pipeline"
+pack: "data-model"
+answered_at: "2025-01-15T10:00:00Z"
+
+answers:
+  database:
+    type: "PostgreSQL"
+    orm: "sqlx (raw SQL with struct mapping)"
+    migrations: "golang-migrate"
+
+  tables:
+    pipelines: "id, owner_id, name, config, status, created_at, updated_at"
+    batches: "id, pipeline_id, status, record_count, failed_count, started_at, completed_at"
+    batch_errors: "id, batch_id, record_index, error_message, created_at"
+
+  indexes:
+    - "pipelines(owner_id, status)"
+    - "batches(pipeline_id, status)"
+    - "batch_errors(batch_id)"
+
+  id_strategy: "UUID"
+  timestamp_handling: "UTC with timezone"

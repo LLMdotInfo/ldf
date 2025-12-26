@@ -1,0 +1,21 @@
+feature_name: "user-auth"
+pack: "testing"
+answered_at: "2025-01-15T10:00:00Z"
+
+answers:
+  coverage:
+    auth_service: "90% minimum"
+    endpoints: "85% minimum"
+    overall: "80% minimum"
+
+  test_types:
+    unit: "AuthService methods"
+    integration: "API endpoints"
+    security: "Enumeration, injection testing"
+
+  mocking:
+    strategy: "Mock external dependencies (database, email)"
+    tools: "pytest-mock"
+
+  test_data:
+    strategy: "Factory fixtures for users, tokens"

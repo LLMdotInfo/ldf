@@ -1,0 +1,35 @@
+_schema_version: '1.1'
+project:
+  name: ldf
+  version: 1.0.0
+  specs_dir: .ldf/specs
+ldf:
+  version: 1.0.0
+  preset: custom
+  updated: '2025-12-25T12:32:16.825788'
+question_packs:
+  core:
+  - security
+  - testing
+  - api-design
+  - data-model
+  optional: []
+mcp_servers:
+  enabled: true
+  servers:
+  - spec_inspector
+  - coverage_reporter
+defaults:
+  coverage_target: 80
+  strict_mode: false
+coverage:
+  default_threshold: 80
+  critical_threshold: 90
+lint:
+  strict: false
+  auto_fix: false
+_checksums:
+  question-packs/core/security.yaml: 4cd40bbda5dd67cbc61ccf509d7e26938b3b3cd71b65add7de3d0e50cc3c4f4e
+  question-packs/core/testing.yaml: d48125cfd9f165dcfc14bace13739be7d0b220cbd1ce9be486f89183443912d8
+  question-packs/core/api-design.yaml: 4b027f6c019aaf0c52baceefdd451a68461029bd7351fe91e08d62fd6d4045e3
+  question-packs/core/data-model.yaml: 05293414363e76cbea7d2d95c75ee71804fe233354d6f34240a5885aeeab4b6b

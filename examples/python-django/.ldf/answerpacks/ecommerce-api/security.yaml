@@ -1,0 +1,27 @@
+feature_name: "ecommerce-api"
+pack: "security"
+answered_at: "2025-01-15T10:00:00Z"
+
+answers:
+  authentication:
+    method: "JWT tokens via djangorestframework-simplejwt"
+    access_token_expiry: "15 minutes"
+    refresh_token_expiry: "7 days"
+
+  authorization:
+    roles: "Customer, Vendor, Admin"
+    permissions: "Django permissions with custom rules"
+    resource_access: "Vendors can only modify their products"
+
+  payment:
+    pci_compliance: "Payment data not stored (uses payment gateway tokens)"
+    implementation: "Mock payment processor for demo"
+
+  data_protection:
+    encryption: "Encrypted at rest (Django encrypted fields)"
+    pii: "Email, addresses stored securely"
+    access_logs: "All order accesses logged"
+
+  input_validation:
+    method: "DRF serializers with validation"
+    xss_prevention: "Framework handles it"
