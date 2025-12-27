@@ -48,6 +48,25 @@ Full documentation is available in the extension repository:
 | `ldf.guardrailsFile` | `.ldf/guardrails.yaml` | Guardrails config |
 | `ldf.autoRefresh` | `true` | Auto-refresh on file changes |
 
+## Multi-Root Workspace Support
+
+The VS Code extension supports multi-root workspaces where multiple LDF projects are open simultaneously. Each workspace folder with a `.ldf/config.yaml` is treated as an independent LDF project.
+
+### Features
+- Separate spec tree views per workspace
+- Independent guardrail tracking per workspace
+- Workspace-aware commands (lint runs in correct project)
+
+### Settings
+| Setting | Description |
+|---------|-------------|
+| `ldf.primaryGuardrailWorkspace` | Apply one workspace's guardrails to all |
+
+Use the `LDF: Select Primary Guardrail Workspace` command to set this interactively.
+
+### CLI Behavior
+The LDF CLI operates on the current working directory. When running CLI commands from VS Code's integrated terminal, ensure you're in the correct workspace folder.
+
 ## Repository
 
 **GitHub:** [https://github.com/LLMdotInfo/ldf-vscode](https://github.com/LLMdotInfo/ldf-vscode)
