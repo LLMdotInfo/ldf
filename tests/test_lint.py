@@ -1524,3 +1524,239 @@ class TestSarifEdgeCases:
         captured = capsys.readouterr()
         sarif = json.loads(captured.out)
         assert sarif["version"] == "2.1.0"
+
+
+class TestLintOutputFormats:
+    """Tests for various lint output formats."""
+
+    def test_json_output_no_ldf_dir(self, tmp_path: Path, monkeypatch, capsys):
+        """Test JSON output when .ldf directory doesn't exist."""
+        monkeypatch.chdir(tmp_path)
+
+        result = lint_specs(spec_name=None, lint_all=True, fix=False, output_format="json")
+
+        captured = capsys.readouterr()
+        output = json.loads(captured.out)
+        assert "error" in output
+        assert ".ldf/" in output["error"]
+        assert result == 1
+
+    def test_text_output_no_specs_dir(self, temp_project: Path, monkeypatch, capsys):
+        """Test text output when specs directory doesn't exist."""
+        import shutil
+        specs_dir = temp_project / ".ldf" / "specs"
+        if specs_dir.exists():
+            shutil.rmtree(specs_dir)
+        monkeypatch.chdir(temp_project)
+
+        result = lint_specs(spec_name=None, lint_all=True, fix=False, output_format="text")
+
+        # Should succeed with no specs
+        assert result == 0
+
+    def test_json_output_valid_spec(self, temp_spec: Path, monkeypatch, capsys):
+        """Test JSON output for valid spec."""
+        project_dir = temp_spec.parent.parent.parent
+        monkeypatch.chdir(project_dir)
+
+        result = lint_specs(spec_name="test-feature", lint_all=False, fix=False, output_format="json")
+
+        captured = capsys.readouterr()
+        # JSON output may have some text before the JSON, find the JSON part
+        output_lines = captured.out.strip().split('\n')
+        json_start = next((i for i, line in enumerate(output_lines) if line.startswith('{')), 0)
+        json_str = '\n'.join(output_lines[json_start:])
+        output = json.loads(json_str)
+        assert "specs" in output or "specs_checked" in output
+        # Result may be non-zero if there are warnings (missing answerpacks)
+        assert result in (0, 1)
+
+    def test_ci_output_valid_spec(self, temp_spec: Path, monkeypatch, capsys):
+        """Test CI output for valid spec."""
+        project_dir = temp_spec.parent.parent.parent
+        monkeypatch.chdir(project_dir)
+
+        result = lint_specs(spec_name="test-feature", lint_all=False, fix=False, output_format="ci")
+
+        captured = capsys.readouterr()
+        assert "LINT SUMMARY" in captured.out or "PASSED" in captured.out or "test-feature" in captured.out
+        assert result == 0
+
+    def test_text_output_valid_spec(self, temp_spec: Path, monkeypatch, capsys):
+        """Test text output for valid spec."""
+        project_dir = temp_spec.parent.parent.parent
+        monkeypatch.chdir(project_dir)
+
+        result = lint_specs(spec_name="test-feature", lint_all=False, fix=False, output_format="text")
+
+        captured = capsys.readouterr()
+        # Text mode should print something
+        assert "test-feature" in captured.out or result == 0
+
+
+class TestLintVerboseOutput:
+    """Tests for verbose lint output."""
+
+    def test_verbose_output_with_errors(self, temp_project: Path, monkeypatch, capsys):
+        """Test verbose output shows detailed errors."""
+        # Create a spec with issues
+        spec_dir = temp_project / ".ldf" / "specs" / "bad-spec"
+        spec_dir.mkdir(parents=True)
+        (spec_dir / "requirements.md").write_text("# Requirements\n\nNo proper sections here")
+
+        monkeypatch.chdir(temp_project)
+
+        from ldf.lint import _print_summary
+
+        # Mock results with errors
+        results = [
+            ("bad-spec", ["Missing User Stories section"], ["Consider adding examples"]),
+        ]
+
+        _print_summary(results, total_errors=1, total_warnings=1, verbose=True)
+
+        captured = capsys.readouterr()
+        assert "bad-spec" in captured.out
+        assert "error" in captured.out.lower() or "Missing" in captured.out
+
+    def test_verbose_output_no_errors(self, temp_project: Path, monkeypatch, capsys):
+        """Test verbose output with no errors or warnings."""
+        monkeypatch.chdir(temp_project)
+
+        from ldf.lint import _print_summary
+
+        results = [("good-spec", [], [])]
+
+        _print_summary(results, total_errors=0, total_warnings=0, verbose=True)
+
+        captured = capsys.readouterr()
+        assert "passed" in captured.out.lower()
+
+
+class TestLintCISummary:
+    """Tests for CI summary output."""
+
+    def test_ci_summary_with_errors(self, capsys):
+        """Test CI summary shows error count."""
+        from ldf.lint import _print_ci_summary
+
+        results = [
+            ("spec1", ["error1", "error2"], []),
+            ("spec2", [], ["warning1"]),
+            ("spec3", [], []),
+        ]
+
+        _print_ci_summary(results, total_errors=2, total_warnings=1)
+
+        captured = capsys.readouterr()
+        assert "LINT SUMMARY" in captured.out
+        assert "spec1" in captured.out
+        assert "spec2" in captured.out
+        assert "spec3" in captured.out
+        assert "❌" in captured.out  # Error indicator
+        assert "⚠️" in captured.out  # Warning indicator
+        assert "✅" in captured.out  # Pass indicator
+
+    def test_ci_summary_all_pass(self, capsys):
+        """Test CI summary when all specs pass."""
+        from ldf.lint import _print_ci_summary
+
+        results = [
+            ("spec1", [], []),
+            ("spec2", [], []),
+        ]
+
+        _print_ci_summary(results, total_errors=0, total_warnings=0)
+
+        captured = capsys.readouterr()
+        assert "LINT SUMMARY" in captured.out
+        assert "✅" in captured.out
+
+
+class TestLintWorkspaceReferences:
+    """Tests for workspace reference validation in linting."""
+
+    def test_reference_validation_not_in_workspace(self, temp_spec: Path):
+        """Test reference validation when not in a workspace."""
+        from ldf.lint import validate_spec_references
+
+        project_root = temp_spec.parent.parent.parent
+
+        errors, warnings = validate_spec_references(temp_spec, project_root)
+
+        # Should return empty when not in a workspace
+        assert errors == []
+        assert warnings == []
+
+    def test_reference_validation_in_workspace(self, tmp_path: Path):
+        """Test reference validation in a workspace context."""
+        from ldf.lint import validate_spec_references
+
+        # Create workspace structure
+        workspace = tmp_path / "workspace"
+        workspace.mkdir()
+
+        # Create workspace manifest
+        manifest = workspace / "ldf-workspace.yaml"
+        manifest.write_text("""
+version: "1.0"
+name: test-workspace
+projects:
+  explicit:
+    - path: services/auth
+      alias: auth
+shared:
+  path: .ldf-shared/
+""")
+
+        # Create a project with a spec
+        auth_project = workspace / "services" / "auth"
+        ldf_dir = auth_project / ".ldf"
+        ldf_dir.mkdir(parents=True)
+        (ldf_dir / "config.yaml").write_text("_schema_version: '1.1'")
+
+        spec_dir = ldf_dir / "specs" / "login"
+        spec_dir.mkdir(parents=True)
+        (spec_dir / "requirements.md").write_text("# Requirements\n\nNo cross-project refs")
+
+        errors, warnings = validate_spec_references(spec_dir, auth_project)
+
+        # Should succeed with no references
+        assert errors == []
+        assert warnings == []
+
+
+class TestLintSecurityValidation:
+    """Tests for security validation in linting."""
+
+    def test_lint_with_path_traversal_spec_name_sarif(self, temp_project: Path, monkeypatch, capsys):
+        """Test SARIF output for path traversal attempt."""
+        monkeypatch.chdir(temp_project)
+
+        result = lint_specs(
+            spec_name="../../../etc/passwd",
+            lint_all=False,
+            fix=False,
+            output_format="sarif"
+        )
+
+        captured = capsys.readouterr()
+        sarif = json.loads(captured.out)
+        assert result == 1
+        # Should have an error in the SARIF output
+        assert sarif["runs"][0].get("invocations") or sarif["runs"][0].get("results")
+
+    def test_lint_with_path_traversal_spec_name_ci(self, temp_project: Path, monkeypatch, capsys):
+        """Test CI output for path traversal attempt."""
+        monkeypatch.chdir(temp_project)
+
+        result = lint_specs(
+            spec_name="../../../etc/passwd",
+            lint_all=False,
+            fix=False,
+            output_format="ci"
+        )
+
+        captured = capsys.readouterr()
+        assert result == 1
+        assert "Security" in captured.out or "Error" in captured.out or "failed" in captured.out.lower()

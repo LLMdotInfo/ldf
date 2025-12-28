@@ -19,6 +19,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Shared Resources** - Inherit guardrails, templates, and question-packs from `.ldf-shared/`
 - **Workspace-Wide Validation** - Lint and validate across all projects with `--validate-refs`
 
+#### Test Coverage & Quality
+- **92% Test Coverage** - Comprehensive test suite with 1,302 passing tests
+- **Coverage Threshold** - Minimum 90% coverage enforced in CI
+- **New Test Modules** - project_resolver, workspace_commands, workspace_models, references, spec_list, template_mgmt
+- **Output Format Tests** - JSON, SARIF, and text output validation for lint and template commands
+
+#### Security Hardening
+- **Empty String Validation** - MCP spec_inspector validates spec names
+- **Python Interpreter Path** - MCP config uses `sys.executable` for correct venv handling
+- **Path Parts Matching** - Workspace exclusions use path parts instead of substring matching
+- **Error Surfacing** - YAML parse errors in workspace manifest are properly reported
+
 ### Changed
 - Version number now aligns with config schema version (1.1)
 

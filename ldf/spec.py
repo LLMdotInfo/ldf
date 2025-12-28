@@ -6,7 +6,12 @@ from ldf.utils.config import get_answerpacks_dir, get_specs_dir, get_templates_d
 from ldf.utils.console import console
 from ldf.utils.guardrail_loader import detect_shared_resources_path
 from ldf.utils.logging import get_logger
-from ldf.utils.security import SecurityError, is_safe_directory_entry, validate_spec_path_safe
+from ldf.utils.security import (
+    SecurityError,
+    is_safe_directory_entry,
+    validate_spec_name,
+    validate_spec_path_safe,
+)
 from ldf.utils.spec_utils import sanitize_spec_name
 
 logger = get_logger(__name__)
@@ -80,14 +85,7 @@ def create_spec(name: str, project_root: Path | None = None) -> bool:
     if project_root is None:
         project_root = Path.cwd()
 
-    # Sanitize spec name to prevent path traversal
-    try:
-        name = sanitize_spec_name(name)
-    except ValueError as e:
-        console.print(f"[red]Error: {e}[/red]")
-        return False
-
-    # Check LDF is initialized
+    # Check LDF is initialized first (needed for validate_spec_name)
     ldf_dir = project_root / ".ldf"
     if not ldf_dir.exists():
         console.print("[red]Error: LDF not initialized.[/red]")
@@ -97,6 +95,14 @@ def create_spec(name: str, project_root: Path | None = None) -> bool:
     # Get directories
     specs_dir = get_specs_dir(project_root)
     answerpacks_dir = get_answerpacks_dir(project_root)
+
+    # Validate spec name using the comprehensive security validator
+    # (handles hidden dirs, symlinks, Windows paths, empty strings, etc.)
+    try:
+        validate_spec_name(name, specs_dir)
+    except SecurityError as e:
+        console.print(f"[red]Error: {e}[/red]")
+        return False
 
     # Detect shared resources path for template fallback
     shared_resources_path = detect_shared_resources_path(project_root)

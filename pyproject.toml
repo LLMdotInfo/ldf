@@ -112,4 +112,4 @@ exclude = ["ldf/_mcp_servers/"]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_functions = ["test_*"]
-addopts = "-v --cov=ldf --cov-report=term-missing --cov-fail-under=80"
+addopts = "-v --cov=ldf --cov-report=term-missing --cov-fail-under=90"

@@ -4,9 +4,12 @@ This module provides the ProjectResolver class which resolves project context
 from CLI arguments, environment variables, and filesystem detection.
 """
 
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from ldf.models.workspace import WorkspaceManifest
@@ -236,7 +239,22 @@ class ProjectResolver:
             with open(manifest_path) as f:
                 data = yaml.safe_load(f) or {}
             return WorkspaceManifest.from_dict(data)
-        except Exception:
+        except yaml.YAMLError as e:
+            # Surface YAML parsing errors - these indicate a broken config
+            logger.warning(f"Failed to parse workspace manifest {manifest_path}: {e}")
+            raise WorkspaceNotFoundError(
+                f"Invalid workspace manifest at {manifest_path}: {e}"
+            )
+        except (KeyError, TypeError, ValueError, AttributeError) as e:
+            # Surface validation errors from WorkspaceManifest.from_dict
+            # AttributeError catches cases like passing a string where dict expected
+            logger.warning(f"Invalid workspace manifest structure {manifest_path}: {e}")
+            raise WorkspaceNotFoundError(
+                f"Invalid workspace manifest structure at {manifest_path}: {e}"
+            )
+        except Exception as e:
+            # Log unexpected errors but don't raise to allow fallback
+            logger.warning(f"Unexpected error loading workspace manifest: {e}")
             return None
 
     def _is_ldf_project(self, path: Path) -> bool:

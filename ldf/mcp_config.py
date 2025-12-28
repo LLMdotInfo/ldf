@@ -1,6 +1,7 @@
 """MCP configuration generator for LDF projects."""
 
 import json
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -35,10 +36,10 @@ def generate_mcp_config(
 
     mcp_servers_dir = get_mcp_servers_dir()
 
-    # Available servers
+    # Available servers - use sys.executable to ensure correct Python interpreter
     available_servers = {
         "spec_inspector": {
-            "command": "python",
+            "command": sys.executable,
             "args": [str(mcp_servers_dir / "spec_inspector" / "server.py")],
             "env": {
                 "LDF_ROOT": str(project_root),
@@ -46,7 +47,7 @@ def generate_mcp_config(
             },
         },
         "coverage_reporter": {
-            "command": "python",
+            "command": sys.executable,
             "args": [str(mcp_servers_dir / "coverage_reporter" / "server.py")],
             "env": {
                 "PROJECT_ROOT": str(project_root),

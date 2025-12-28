@@ -216,9 +216,10 @@ class WorkspaceManifest:
         discovered = []
         for pattern in self.projects.discovery.patterns:
             for match in workspace_root.glob(pattern):
-                # Check against exclude list
+                # Check against exclude list using path parts (not substring matching)
+                # This prevents false positives like "my-node_modules-project"
                 should_exclude = any(
-                    excl in str(match) for excl in self.projects.discovery.exclude
+                    excl in match.parts for excl in self.projects.discovery.exclude
                 )
                 if should_exclude:
                     continue

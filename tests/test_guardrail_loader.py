@@ -401,6 +401,349 @@ class TestGetGuardrailById:
         assert guardrail.id == 1
 
 
+class TestLoadSharedGuardrails:
+    """Tests for load_shared_guardrails function."""
+
+    def test_returns_empty_when_no_guardrails_dir(self, tmp_path):
+        """Test returns empty list when guardrails directory doesn't exist."""
+        from ldf.utils.guardrail_loader import load_shared_guardrails
+
+        shared_path = tmp_path / ".ldf-shared"
+        shared_path.mkdir()
+        # No guardrails subdirectory
+
+        result = load_shared_guardrails(shared_path)
+
+        assert result == []
+
+    def test_loads_guardrails_from_yaml_files(self, tmp_path):
+        """Test loading guardrails from YAML files in shared resources."""
+        from ldf.utils.guardrail_loader import load_shared_guardrails
+
+        shared_path = tmp_path / ".ldf-shared"
+        guardrails_dir = shared_path / "guardrails"
+        guardrails_dir.mkdir(parents=True)
+
+        # Create a shared guardrails file
+        guardrails_dir.joinpath("team-rules.yaml").write_text("""
+guardrails:
+  - id: 100
+    name: "Team Rule 1"
+    description: "First shared rule"
+    severity: high
+  - id: 101
+    name: "Team Rule 2"
+    description: "Second shared rule"
+    severity: medium
+""")
+
+        result = load_shared_guardrails(shared_path)
+
+        assert len(result) == 2
+        assert result[0].id == 100
+        assert result[0].name == "Team Rule 1"
+        assert result[1].id == 101
+
+    def test_handles_malformed_yaml(self, tmp_path, caplog):
+        """Test graceful handling of malformed YAML files."""
+        from ldf.utils.guardrail_loader import load_shared_guardrails
+
+        shared_path = tmp_path / ".ldf-shared"
+        guardrails_dir = shared_path / "guardrails"
+        guardrails_dir.mkdir(parents=True)
+
+        # Create a malformed YAML file
+        guardrails_dir.joinpath("bad.yaml").write_text("not: valid: yaml: [[[")
+
+        result = load_shared_guardrails(shared_path)
+
+        # Should return empty list and log a warning
+        assert result == []
+
+    def test_loads_from_multiple_yaml_files(self, tmp_path):
+        """Test loading from multiple YAML files in alphabetical order."""
+        from ldf.utils.guardrail_loader import load_shared_guardrails
+
+        shared_path = tmp_path / ".ldf-shared"
+        guardrails_dir = shared_path / "guardrails"
+        guardrails_dir.mkdir(parents=True)
+
+        guardrails_dir.joinpath("a-rules.yaml").write_text("""
+guardrails:
+  - id: 1
+    name: "From A"
+""")
+        guardrails_dir.joinpath("b-rules.yaml").write_text("""
+guardrails:
+  - id: 2
+    name: "From B"
+""")
+
+        result = load_shared_guardrails(shared_path)
+
+        assert len(result) == 2
+        # Files loaded in sorted order
+        assert result[0].name == "From A"
+        assert result[1].name == "From B"
+
+
+class TestMergeGuardrails:
+    """Tests for _merge_guardrails function."""
+
+    def test_overlay_overrides_base(self, tmp_path):
+        """Test that overlay guardrails override base guardrails with same ID."""
+        from ldf.utils.guardrail_loader import Guardrail, _merge_guardrails
+
+        base = [
+            Guardrail(id=1, name="Base Rule", description="Original", severity="low", enabled=True),
+            Guardrail(id=2, name="Unchanged", description="Stays same", severity="medium", enabled=True),
+        ]
+
+        overlay = [
+            Guardrail(id=1, name="Overlay Rule", description="Updated", severity="high", enabled=False,
+                      checklist=["Check 1"]),
+        ]
+
+        result = _merge_guardrails(base, overlay)
+
+        # Should have 2 guardrails
+        assert len(result) == 2
+
+        # ID 1 should be updated
+        merged_1 = next(g for g in result if g.id == 1)
+        assert merged_1.enabled is False
+        assert merged_1.checklist == ["Check 1"]
+
+        # ID 2 should be unchanged
+        merged_2 = next(g for g in result if g.id == 2)
+        assert merged_2.name == "Unchanged"
+
+    def test_overlay_adds_new_guardrails(self, tmp_path):
+        """Test that overlay can add new guardrails not in base."""
+        from ldf.utils.guardrail_loader import Guardrail, _merge_guardrails
+
+        base = [
+            Guardrail(id=1, name="Existing", description="", severity="medium", enabled=True),
+        ]
+
+        overlay = [
+            Guardrail(id=100, name="New Rule", description="Added by overlay", severity="high", enabled=True),
+        ]
+
+        result = _merge_guardrails(base, overlay)
+
+        assert len(result) == 2
+        new_rule = next((g for g in result if g.id == 100), None)
+        assert new_rule is not None
+        assert new_rule.name == "New Rule"
+
+    def test_overlay_updates_config(self, tmp_path):
+        """Test that overlay config is merged into base config."""
+        from ldf.utils.guardrail_loader import Guardrail, _merge_guardrails
+
+        base = [
+            Guardrail(id=1, name="Rule", description="", severity="medium", enabled=True,
+                      config={"threshold": 80, "key1": "original"}),
+        ]
+
+        overlay = [
+            Guardrail(id=1, name="Rule", description="", severity="medium", enabled=True,
+                      config={"threshold": 95, "key2": "new"}),
+        ]
+
+        result = _merge_guardrails(base, overlay)
+
+        merged = result[0]
+        assert merged.config["threshold"] == 95  # Updated
+        assert merged.config["key1"] == "original"  # Preserved
+        assert merged.config["key2"] == "new"  # Added
+
+
+class TestDetectSharedResourcesPath:
+    """Tests for detect_shared_resources_path function."""
+
+    def test_returns_none_when_no_workspace(self, tmp_path):
+        """Test returns None when not in a workspace."""
+        from ldf.utils.guardrail_loader import detect_shared_resources_path
+
+        project = tmp_path / "standalone-project"
+        project.mkdir()
+
+        result = detect_shared_resources_path(project)
+
+        assert result is None
+
+    def test_finds_shared_resources_from_manifest(self, tmp_path):
+        """Test finds shared resources path from workspace manifest."""
+        from ldf.utils.guardrail_loader import detect_shared_resources_path
+
+        # Create workspace
+        workspace = tmp_path / "workspace"
+        workspace.mkdir()
+
+        manifest = workspace / "ldf-workspace.yaml"
+        manifest.write_text("""
+version: "1.0"
+name: test-workspace
+projects:
+  explicit: []
+shared:
+  path: .ldf-shared/
+""")
+
+        # Create shared resources directory
+        shared = workspace / ".ldf-shared"
+        shared.mkdir()
+
+        # Create a project inside the workspace
+        project = workspace / "services" / "api"
+        project.mkdir(parents=True)
+
+        result = detect_shared_resources_path(project)
+
+        assert result == shared
+
+    def test_finds_custom_shared_path(self, tmp_path):
+        """Test finds custom shared path from manifest."""
+        from ldf.utils.guardrail_loader import detect_shared_resources_path
+
+        workspace = tmp_path / "workspace"
+        workspace.mkdir()
+
+        manifest = workspace / "ldf-workspace.yaml"
+        manifest.write_text("""
+version: "1.0"
+name: test-workspace
+shared:
+  path: shared-resources/
+""")
+
+        # Create custom shared directory
+        shared = workspace / "shared-resources"
+        shared.mkdir()
+
+        result = detect_shared_resources_path(workspace)
+
+        assert result == shared
+
+    def test_returns_none_when_shared_dir_missing(self, tmp_path):
+        """Test returns None when shared directory doesn't exist."""
+        from ldf.utils.guardrail_loader import detect_shared_resources_path
+
+        workspace = tmp_path / "workspace"
+        workspace.mkdir()
+
+        manifest = workspace / "ldf-workspace.yaml"
+        manifest.write_text("""
+version: "1.0"
+name: test-workspace
+shared:
+  path: .ldf-shared/
+""")
+        # Don't create the .ldf-shared directory
+
+        result = detect_shared_resources_path(workspace)
+
+        assert result is None
+
+    def test_handles_malformed_manifest(self, tmp_path):
+        """Test graceful fallback when manifest is malformed."""
+        from ldf.utils.guardrail_loader import detect_shared_resources_path
+
+        workspace = tmp_path / "workspace"
+        workspace.mkdir()
+
+        manifest = workspace / "ldf-workspace.yaml"
+        manifest.write_text("not: valid: yaml: [[[")
+
+        # Create default shared dir as fallback
+        shared = workspace / ".ldf-shared"
+        shared.mkdir()
+
+        result = detect_shared_resources_path(workspace)
+
+        # Should fall back to default .ldf-shared
+        assert result == shared
+
+
+class TestLoadGuardrailsWithSharedResources:
+    """Tests for load_guardrails with workspace shared resources."""
+
+    def test_loads_shared_guardrails_in_workspace(self, tmp_path):
+        """Test loading shared guardrails when in a workspace."""
+        from ldf.utils.guardrail_loader import load_guardrails
+
+        # Create workspace
+        workspace = tmp_path / "workspace"
+        workspace.mkdir()
+
+        manifest = workspace / "ldf-workspace.yaml"
+        manifest.write_text("""
+version: "1.0"
+name: test-workspace
+shared:
+  path: .ldf-shared/
+""")
+
+        # Create shared guardrails
+        shared = workspace / ".ldf-shared"
+        shared_guardrails = shared / "guardrails"
+        shared_guardrails.mkdir(parents=True)
+        shared_guardrails.joinpath("team.yaml").write_text("""
+guardrails:
+  - id: 200
+    name: "Shared Team Rule"
+    severity: high
+""")
+
+        # Create project with guardrails config
+        project = workspace / "api"
+        project.mkdir()
+        ldf_dir = project / ".ldf"
+        ldf_dir.mkdir()
+        (ldf_dir / "guardrails.yaml").write_text("""
+version: "1.0"
+""")
+
+        result = load_guardrails(project, shared_resources_path=shared)
+
+        # Should have core guardrails + shared guardrail
+        assert len(result) == 9
+        shared_rule = next((g for g in result if g.id == 200), None)
+        assert shared_rule is not None
+        assert shared_rule.name == "Shared Team Rule"
+
+    def test_disables_shared_guardrails_when_inherit_none(self, tmp_path):
+        """Test that inherit_guardrails: none disables shared loading."""
+        from ldf.utils.guardrail_loader import load_guardrails
+
+        # Create shared resources with guardrails
+        shared = tmp_path / ".ldf-shared"
+        shared_guardrails = shared / "guardrails"
+        shared_guardrails.mkdir(parents=True)
+        shared_guardrails.joinpath("team.yaml").write_text("""
+guardrails:
+  - id: 200
+    name: "Shared Rule"
+""")
+
+        # Create project that disables shared guardrails
+        project = tmp_path / "project"
+        ldf_dir = project / ".ldf"
+        ldf_dir.mkdir(parents=True)
+        (ldf_dir / "guardrails.yaml").write_text("""
+version: "1.0"
+workspace:
+  inherit_guardrails: none
+""")
+
+        result = load_guardrails(project, shared_resources_path=shared)
+
+        # Should only have core guardrails, not shared
+        assert len(result) == 8
+        assert not any(g.id == 200 for g in result)
+
+
 class TestGetGuardrailByName:
     """Tests for get_guardrail_by_name function."""
 

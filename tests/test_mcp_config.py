@@ -65,6 +65,8 @@ class TestGenerateMcpConfig:
 
     def test_server_config_structure(self, tmp_path):
         """Test that server config has expected structure."""
+        import sys
+
         config = generate_mcp_config(tmp_path, output_format="json")
         parsed = json.loads(config)
 
@@ -72,7 +74,8 @@ class TestGenerateMcpConfig:
         assert "command" in spec_inspector
         assert "args" in spec_inspector
         assert "env" in spec_inspector
-        assert spec_inspector["command"] == "python"
+        # Command should be the current Python interpreter (sys.executable)
+        assert spec_inspector["command"] == sys.executable
 
     def test_paths_are_absolute(self, tmp_path):
         """Test that all paths in config are absolute."""

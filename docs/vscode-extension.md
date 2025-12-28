@@ -36,8 +36,8 @@ Full documentation is available in the extension repository:
 |---------|-------------|
 | `LDF: Create New Spec` | Create a new spec |
 | `LDF: Lint Spec` | Lint a specific spec |
-| `LDF: Lint All Specs` | Lint all specs |
-| `LDF: Run Audit` | Run audit on a spec |
+| `LDF: Lint All Specs` | Lint all specs (across all LDF workspaces) |
+| `LDF: Run Audit` | Run audit on a spec (types: spec-review, security, gap-analysis, edge-cases, architecture) |
 | `LDF: Initialize LDF Project` | Set up LDF in workspace |
 
 ### Settings
@@ -56,6 +56,7 @@ The VS Code extension supports multi-root workspaces where multiple LDF projects
 - Separate spec tree views per workspace
 - Independent guardrail tracking per workspace
 - Workspace-aware commands (lint runs in correct project)
+- **Lint All Specs** command now iterates over all LDF-enabled workspace folders
 
 ### Settings
 | Setting | Description |
