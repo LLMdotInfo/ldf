@@ -201,7 +201,7 @@ LDF is up to date. No action needed.
 
 For JSON output (useful in CI/CD):
 ```bash
-ldf status --json
+ldf status --format json
 ```
 
 ## Adding LDF to Existing Projects

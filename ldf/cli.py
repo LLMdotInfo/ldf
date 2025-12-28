@@ -1,8 +1,9 @@
 """LDF CLI - Command line interface for the LLM Development Framework."""
 
+import functools
 import json
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import click
 import yaml
@@ -11,21 +12,114 @@ from ldf import __version__
 from ldf.utils.console import console
 from ldf.utils.logging import configure_logging
 
+if TYPE_CHECKING:
+    from ldf.project_resolver import ProjectContext
+
 
 @click.group()
 @click.version_option(version=__version__, prog_name="ldf")
 @click.option("-v", "--verbose", is_flag=True, help="Enable verbose logging")
+@click.option(
+    "--project",
+    "-p",
+    "project_alias",
+    help="Target a specific project by alias (workspace mode)",
+)
+@click.option(
+    "--workspace",
+    "-w",
+    "workspace_path",
+    type=click.Path(exists=True, file_okay=False),
+    help="Workspace root directory (auto-detected if not specified)",
+)
 @click.pass_context
-def main(ctx, verbose):
+def main(ctx, verbose, project_alias, workspace_path):
     """LDF - LLM Development Framework.
 
     Spec-driven development for AI-assisted software engineering.
+
+    \b
+    Workspace Mode:
+    When a ldf-workspace.yaml is present, LDF operates in workspace mode:
+      ldf --project auth lint     # Lint the 'auth' project
+      ldf --project billing status # Status of 'billing' project
+      ldf -p auth coverage        # Short form
+
+    Without --project, LDF auto-detects the current project from your
+    working directory, or falls back to single-project mode.
     """
     ctx.ensure_object(dict)
     ctx.obj["verbose"] = verbose
+    ctx.obj["project_alias"] = project_alias
+    ctx.obj["workspace_path"] = workspace_path
+    ctx.obj["project_context"] = None  # Lazy-resolved on demand
 
     if verbose:
         configure_logging(verbose=True)
+
+
+def get_project_context(ctx: click.Context) -> "ProjectContext":
+    """Get the resolved project context, resolving lazily if needed.
+
+    This function should be called by commands that need project context.
+    It caches the result in ctx.obj for subsequent calls.
+
+    Args:
+        ctx: Click context
+
+    Returns:
+        Resolved ProjectContext
+
+    Raises:
+        click.ClickException: If project cannot be resolved
+    """
+    from ldf.project_resolver import (
+        ProjectContext,
+        ProjectNotFoundError,
+        ProjectResolver,
+        WorkspaceNotFoundError,
+    )
+
+    # Return cached context if available
+    if ctx.obj.get("project_context"):
+        return ctx.obj["project_context"]
+
+    # Resolve project context
+    try:
+        resolver = ProjectResolver()
+        context = resolver.resolve(
+            project=ctx.obj.get("project_alias"),
+            workspace=ctx.obj.get("workspace_path"),
+        )
+        ctx.obj["project_context"] = context
+        return context
+    except ProjectNotFoundError as e:
+        msg = str(e)
+        if e.available_projects:
+            msg += f"\n\nAvailable projects: {', '.join(e.available_projects)}"
+        raise click.ClickException(msg)
+    except WorkspaceNotFoundError as e:
+        raise click.ClickException(str(e))
+
+
+def with_project_context(f):
+    """Decorator for commands that need project context.
+
+    Resolves the project context from global options and passes it
+    as a 'project_context' keyword argument to the command function.
+
+    Usage:
+        @main.command()
+        @with_project_context
+        def mycommand(project_context):
+            print(f"Working in {project_context.project_root}")
+    """
+    @functools.wraps(f)
+    @click.pass_context
+    def wrapper(ctx, *args, **kwargs):
+        project_context = get_project_context(ctx)
+        return f(*args, project_context=project_context, **kwargs)
+    return wrapper
 
 
 @main.command()
@@ -503,7 +597,6 @@ def mcp_config(root: Path | None, server: tuple, output_format: str):
 
 @main.command()
 @click.option("--spec", help="Spec name for spec-specific coverage")
-@click.option("--service", "-s", hidden=True, help="[DEPRECATED: use --spec] Service name")
 @click.option(
     "--guardrail",
     "-g",
@@ -515,12 +608,6 @@ def mcp_config(root: Path | None, server: tuple, output_format: str):
     type=float,
     help="Exit with error code if coverage below this percentage (e.g., 80)",
 )
-@click.option(
-    "--validate",
-    is_flag=True,
-    hidden=True,
-    help="[DEPRECATED: use --fail-under] Exit with error if below threshold",
-)
 @click.option("--verbose", "-v", is_flag=True, help="Show detailed per-file breakdown")
 @click.option(
     "--save",
@@ -531,12 +618,6 @@ def mcp_config(root: Path | None, server: tuple, output_format: str):
     "--compare",
     "compare_target",
     help="Compare current coverage with saved snapshot or file path",
-)
-@click.option(
-    "--diff",
-    "diff_target",
-    hidden=True,
-    help="[DEPRECATED: use --compare] Compare with saved snapshot",
 )
 @click.option(
     "--upload",
@@ -551,14 +632,11 @@ def mcp_config(root: Path | None, server: tuple, output_format: str):
 )
 def coverage(
     spec: str | None,
-    service: str | None,
     guardrail: int | None,
     fail_under: float | None,
-    validate: bool,
     verbose: bool,
     save_name: str | None,
     compare_target: str | None,
-    diff_target: str | None,
     upload_dest: str | None,
     format: str,
 ):
@@ -582,20 +660,6 @@ def coverage(
         save_coverage_snapshot,
         upload_coverage,
     )
-
-    # Handle deprecated flags with warnings
-    if service:
-        console.print("[yellow]Warning: --service is deprecated, use --spec instead[/yellow]")
-        spec = service
-
-    if diff_target:
-        console.print("[yellow]Warning: --diff is deprecated, use --compare instead[/yellow]")
-        compare_target = diff_target
-
-    if validate:
-        console.print("[yellow]Warning: --validate is deprecated, use --fail-under instead[/yellow]")
-        if fail_under is None:
-            fail_under = 80.0  # Default threshold when using --validate
 
     # Handle compare mode
     if compare_target:
@@ -638,13 +702,6 @@ def coverage(
 
 @main.command()
 @click.option(
-    "--json",
-    "json_output",
-    is_flag=True,
-    hidden=True,
-    help="[DEPRECATED: use --format json] Output as JSON",
-)
-@click.option(
     "--format",
     type=click.Choice(["rich", "json", "text"]),
     default="rich",
@@ -656,7 +713,7 @@ def coverage(
     is_flag=True,
     help="Show detailed project information and recommendations",
 )
-def status(json_output: bool, format: str, verbose: bool):
+def status(format: str, verbose: bool):
     """Show LDF project status and recommendations.
 
     Detects the current project state and provides actionable recommendations.
@@ -677,11 +734,6 @@ def status(json_output: bool, format: str, verbose: bool):
         ldf status --format text     # Plain text output
     """
     from ldf.detection import ProjectState, detect_project_state, get_specs_summary
-
-    # Handle deprecated --json flag
-    if json_output:
-        console.print("[yellow]Warning: --json is deprecated, use --format json instead[/yellow]")
-        format = "json"
 
     result = detect_project_state(Path.cwd())
 
@@ -1188,23 +1240,6 @@ def convert_import(file: str, spec_name: str, dry_run: bool):
         console.print("  4. Refine the specs as needed")
 
 
-@main.group("list-framework")
-def list_framework():
-    """List available framework components.
-
-    Shows presets, question packs, guardrails, and MCP servers
-    available in the LDF framework.
-
-    Examples:
-
-        ldf list-framework presets     # List all presets
-        ldf list-framework packs       # List question packs
-        ldf list-framework guardrails  # List guardrails
-        ldf list-framework mcp         # List MCP servers
-    """
-    pass
-
-
 def _list_presets_impl():
     """Implementation of list-presets command."""
     from rich.table import Table
@@ -1222,127 +1257,6 @@ def _list_presets_impl():
         short = get_preset_short(preset)
         extra = get_preset_extra_guardrails(preset)
         table.add_row(preset, short, extra)
-
-    console.print(table)
-
-
-@list_framework.command("presets")
-def list_presets():
-    """List available guardrail presets.
-
-    [yellow]Deprecated: Use 'ldf list-presets' instead.[/yellow]
-    """
-    console.print("[yellow]Note: 'ldf list-framework presets' is deprecated.[/yellow]")
-    console.print("[yellow]Use 'ldf list-presets' instead.[/yellow]")
-    console.print()
-    _list_presets_impl()
-
-
-@list_framework.command("packs")
-def list_packs():
-    """List available question packs.
-
-    [yellow]Deprecated: Use 'ldf list-packs' instead.[/yellow]
-    """
-    console.print("[yellow]Note: 'ldf list-framework packs' is deprecated.[/yellow]")
-    console.print("[yellow]Use 'ldf list-packs' for more features (filters, status, etc.)[/yellow]")
-    console.print()
-
-    from rich.table import Table
-
-    from ldf.utils.descriptions import load_descriptions
-
-    descriptions = load_descriptions()
-    packs = descriptions.get("question_packs", {})
-
-    table = Table(title="Available Question Packs", show_header=True)
-    table.add_column("Pack", style="cyan")
-    table.add_column("Description")
-    table.add_column("Type")
-
-    for name, info in sorted(packs.items()):
-        short = info.get("short", "")
-        is_core = info.get("is_core", False)
-        pack_type = "[green]core[/green]" if is_core else "[cyan]optional[/cyan]"
-        table.add_row(name, short, pack_type)
-
-    console.print(table)
-
-
-@list_framework.command("guardrails")
-def list_guardrails():
-    """List available guardrails by preset."""
-    from rich.table import Table
-
-    from ldf.utils.guardrail_loader import load_core_guardrails, load_preset_guardrails
-
-    # Show core guardrails
-    core = load_core_guardrails()
-    table = Table(title="Core Guardrails (all presets)", show_header=True)
-    table.add_column("ID", style="cyan")
-    table.add_column("Name")
-    table.add_column("Severity")
-
-    for g in core:
-        severity_colors = {
-            "critical": "[red]critical[/red]",
-            "high": "[yellow]high[/yellow]",
-            "medium": "[blue]medium[/blue]",
-            "low": "[dim]low[/dim]",
-        }
-        severity = severity_colors.get(g.severity, g.severity)
-        table.add_row(str(g.id), g.name, severity)
-
-    console.print(table)
-    console.print()
-
-    # Show preset-specific guardrails
-    presets = ["saas", "fintech", "healthcare", "api-only"]
-    for preset in presets:
-        try:
-            preset_guardrails = load_preset_guardrails(preset)
-            if preset_guardrails:
-                table = Table(title=f"Additional Guardrails: {preset}", show_header=True)
-                table.add_column("ID", style="cyan")
-                table.add_column("Name")
-                table.add_column("Severity")
-
-                for g in preset_guardrails:
-                    severity_colors = {
-                        "critical": "[red]critical[/red]",
-                        "high": "[yellow]high[/yellow]",
-                        "medium": "[blue]medium[/blue]",
-                        "low": "[dim]low[/dim]",
-                    }
-                    severity = severity_colors.get(g.severity, g.severity)
-                    table.add_row(str(g.id), g.name, severity)
-
-                console.print(table)
-                console.print()
-        except FileNotFoundError:
-            pass
-
-
-@list_framework.command("mcp")
-def list_mcp():
-    """List available MCP servers."""
-    from rich.table import Table
-
-    from ldf.utils.descriptions import load_descriptions
-
-    descriptions = load_descriptions()
-    servers = descriptions.get("mcp_servers", {})
-
-    table = Table(title="Available MCP Servers", show_header=True)
-    table.add_column("Server", style="cyan")
-    table.add_column("Description")
-    table.add_column("Default")
-
-    for name, info in sorted(servers.items()):
-        short = info.get("short", "")
-        is_default = info.get("default", False)
-        default_str = "[green]yes[/green]" if is_default else "[dim]no[/dim]"
-        table.add_row(name, short, default_str)
 
     console.print(table)
 
@@ -1996,18 +1910,11 @@ def add_pack(pack_name: str | None, list_packs: bool, add_all: bool, force: bool
             console.print(f"[red]Error: Invalid config.yaml: {e}[/red]")
             raise SystemExit(1)
 
-    # Handle both v1.0 (flat list) and v1.1 (core/optional dict) config schemas
-    qp_config = config.get("question_packs", [])
-    if isinstance(qp_config, dict):
-        # v1.1 schema
-        existing_core = set(qp_config.get("core", []))
-        existing_optional = set(qp_config.get("optional", []))
-        existing_packs = existing_core | existing_optional
-    else:
-        # v1.0 schema (flat list) - should not happen since we removed migration
-        existing_core = set()
-        existing_optional = set()
-        existing_packs = set(qp_config)
+    # Get question packs config (v1.1 schema with core/optional dict)
+    qp_config = config.get("question_packs", {})
+    existing_core = set(qp_config.get("core", []))
+    existing_optional = set(qp_config.get("optional", []))
+    existing_packs = existing_core | existing_optional
 
     checksums = config.get("_checksums", {})
 
@@ -2142,7 +2049,6 @@ def list_presets_cmd():
     See also:
 
         ldf init --preset saas        # Initialize with a preset
-        ldf list-framework guardrails # List all guardrails
     """
     _list_presets_impl()
 
@@ -2273,6 +2179,166 @@ def list_packs_cmd(core: bool, optional: bool, installed: bool, format: str):
         if packs_data:
             console.print()
             console.print(f"[dim]Total: {len(packs_data)} pack(s)[/dim]")
+
+
+@main.command("tasks")
+@click.argument("spec_name", required=False)
+@click.option(
+    "--status",
+    "-s",
+    type=click.Choice(["pending", "in_progress", "complete", "all"]),
+    default="all",
+    help="Filter by status: pending, in_progress, complete, all (default: all)",
+)
+@click.option(
+    "--format",
+    "-f",
+    type=click.Choice(["rich", "json", "text"]),
+    default="rich",
+    help="Output format: rich (default), json, or text",
+)
+def tasks_cmd(spec_name: str | None, status: str, format: str):
+    """List tasks across specs with status filtering.
+
+    Shows all tasks from tasks.md files with their completion status.
+    Use --status to filter by pending, in_progress, or complete.
+
+    \b
+    Status icons:
+      ○  pending     - Not started
+      ◐  in_progress - Some checklist items complete
+      ✓  complete    - All checklist items done
+
+    Examples:
+
+        ldf tasks                          # Show all tasks
+        ldf tasks --status pending         # Show only pending tasks
+        ldf tasks --status complete        # Show completed tasks
+        ldf tasks my-feature               # Tasks for specific spec
+        ldf tasks -s in_progress -f json   # In-progress tasks as JSON
+
+    See also:
+
+        ldf list-specs                     # List all specs
+        ldf status                         # Overall project status
+    """
+    import re
+
+    from rich.table import Table
+
+    from ldf.utils.spec_parser import extract_tasks
+
+    project_root = Path.cwd()
+    specs_dir = project_root / ".ldf" / "specs"
+
+    if not specs_dir.exists():
+        console.print("[red]No specs directory found. Run 'ldf init' first.[/red]")
+        raise SystemExit(1)
+
+    # Collect all tasks
+    all_tasks: list[dict[str, Any]] = []
+
+    # Get specs to process
+    if spec_name:
+        spec_dirs = [specs_dir / spec_name]
+        if not spec_dirs[0].exists():
+            console.print(f"[red]Spec '{spec_name}' not found.[/red]")
+            raise SystemExit(1)
+    else:
+        spec_dirs = [d for d in specs_dir.iterdir() if d.is_dir()]
+
+    for spec_dir in spec_dirs:
+        tasks_file = spec_dir / "tasks.md"
+        if not tasks_file.exists():
+            continue
+
+        content = tasks_file.read_text()
+        tasks = extract_tasks(content)
+
+        # Extract phase headers for grouping
+        phase_pattern = re.compile(r"^##\s*(Phase\s+\d+[^#\n]*)", re.MULTILINE)
+        phases = phase_pattern.findall(content)
+
+        for task in tasks:
+            task_data = {
+                "spec": spec_dir.name,
+                "id": task.id,
+                "title": task.title,
+                "status": task.status,
+                "dependencies": task.dependencies,
+            }
+            all_tasks.append(task_data)
+
+    # Filter by status
+    if status != "all":
+        all_tasks = [t for t in all_tasks if t["status"] == status]
+
+    # Output formatting
+    if format == "json":
+        # Summary counts
+        pending_count = sum(1 for t in all_tasks if t["status"] == "pending")
+        in_progress_count = sum(1 for t in all_tasks if t["status"] == "in_progress")
+        complete_count = sum(1 for t in all_tasks if t["status"] == "complete")
+
+        output = {
+            "filter": status,
+            "summary": {
+                "pending": pending_count,
+                "in_progress": in_progress_count,
+                "complete": complete_count,
+                "total": len(all_tasks),
+            },
+            "tasks": all_tasks,
+        }
+        console.print(json.dumps(output, indent=2))
+        return
+
+    if format == "text":
+        for task in all_tasks:
+            icon = {"pending": "○", "in_progress": "◐", "complete": "✓"}.get(task["status"], "?")
+            print(f"{icon} {task['spec']}:{task['id']} {task['title']}")
+        return
+
+    # Rich format (default)
+    if not all_tasks:
+        console.print(f"[dim]No {status if status != 'all' else ''} tasks found.[/dim]")
+        return
+
+    # Group by spec
+    specs_seen: set[str] = set()
+    current_spec = None
+
+    console.print()
+    table = Table(show_header=True, header_style="bold", box=None, padding=(0, 2))
+    table.add_column("Status", width=3)
+    table.add_column("Task", style="cyan")
+    table.add_column("Title")
+    table.add_column("Spec", style="dim")
+
+    for task in all_tasks:
+        icon = {"pending": "○", "in_progress": "[yellow]◐[/yellow]", "complete": "[green]✓[/green]"}.get(
+            task["status"], "?"
+        )
+        table.add_row(icon, task["id"], task["title"], task["spec"])
+
+    console.print(table)
+
+    # Summary
+    pending_count = sum(1 for t in all_tasks if t["status"] == "pending")
+    in_progress_count = sum(1 for t in all_tasks if t["status"] == "in_progress")
+    complete_count = sum(1 for t in all_tasks if t["status"] == "complete")
+
+    console.print()
+    console.print(
+        f"[dim]Summary: {pending_count} pending, {in_progress_count} in progress, "
+        f"{complete_count} complete ({len(all_tasks)} total)[/dim]"
+    )
+
+
+# Register workspace commands
+from ldf.workspace.commands import workspace
+
+main.add_command(workspace)
 
 
 if __name__ == "__main__":

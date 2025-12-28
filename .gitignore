@@ -78,5 +78,6 @@ Thumbs.db
 .codestory/
 
 # Project-specific
-.ldf/answerpacks/*.yaml
+.ldf/answerpacks/
+.ldf/specs/
 !.ldf/answerpacks/.gitkeep

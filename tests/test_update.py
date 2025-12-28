@@ -49,8 +49,6 @@ def temp_project_old_version(temp_project):
     if "ldf" not in config:
         config["ldf"] = {}
     config["ldf"]["version"] = "0.0.1"
-    # Also set legacy field for backwards compat
-    config["framework_version"] = "0.0.1"
     save_project_config(temp_project, config)
     return temp_project
 
@@ -224,14 +222,15 @@ class TestApplyUpdates:
         assert pack_path.read_text() == framework_content
 
     def test_update_updates_version_in_config(self, temp_project_old_version):
-        """Should update framework_version in config after successful update."""
+        """Should update ldf.version in config after successful update."""
         result = apply_updates(temp_project_old_version)
 
         assert result.success is True
 
         config = load_project_config(temp_project_old_version)
-        assert config["framework_version"] == __version__
-        assert "framework_updated" in config
+        # v1.1 schema: version is stored under ldf.version
+        assert config["ldf"]["version"] == __version__
+        assert "updated" in config["ldf"]
 
     def test_update_never_touches_specs(self, temp_project):
         """Should never modify files in specs/ directory."""
@@ -409,7 +408,8 @@ class TestDiffQuestionPacks:
     def test_handles_pack_not_in_framework(self, temp_project):
         """Should handle packs that don't exist in framework."""
         config = load_project_config(temp_project)
-        config["question_packs"] = ["nonexistent-pack"]
+        # v1.1 schema: dict with core and optional lists
+        config["question_packs"] = {"core": ["nonexistent-pack"], "optional": []}
         save_project_config(temp_project, config)
 
         diff = UpdateDiff()
@@ -477,13 +477,14 @@ class TestCopyFrameworkFile:
         ldf_dir = temp_project / ".ldf"
         checksums = {}
 
-        _copy_framework_file(ldf_dir, "question-packs/security.yaml", checksums)
+        # v1.1 schema: core packs are in question-packs/core/
+        _copy_framework_file(ldf_dir, "question-packs/core/security.yaml", checksums)
 
-        assert (ldf_dir / "question-packs" / "security.yaml").exists()
-        assert "question-packs/security.yaml" in checksums
+        assert (ldf_dir / "question-packs" / "core" / "security.yaml").exists()
+        assert "question-packs/core/security.yaml" in checksums
 
     def test_copies_question_pack_from_domain(self, temp_project):
-        """Should copy question pack from domain directory if not in core."""
+        """Should copy question pack from domain directory (mapped to optional/ in project)."""
         from ldf.update import FRAMEWORK_DIR
 
         ldf_dir = temp_project / ".ldf"
@@ -496,8 +497,9 @@ class TestCopyFrameworkFile:
         domain_pack.write_text("questions:\n  - id: test\n    text: Test question\n")
 
         try:
-            _copy_framework_file(ldf_dir, "question-packs/fintech.yaml", checksums)
-            assert (ldf_dir / "question-packs" / "fintech.yaml").exists()
+            # v1.1 schema: domain packs are in question-packs/optional/ in the project
+            _copy_framework_file(ldf_dir, "question-packs/optional/fintech.yaml", checksums)
+            assert (ldf_dir / "question-packs" / "optional" / "fintech.yaml").exists()
         finally:
             # Clean up the mock domain pack
             if domain_pack.exists():

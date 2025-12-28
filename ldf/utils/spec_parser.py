@@ -43,6 +43,22 @@ class GuardrailMatrixRow:
     owner: str
     status: str
 
+    @property
+    def is_not_applicable(self) -> bool:
+        """Check if this guardrail is marked as N/A."""
+        return self.status.upper().startswith("N/A")
+
+    @property
+    def justification(self) -> str | None:
+        """Extract justification text from N/A status.
+
+        Returns:
+            Justification text if status is "N/A - <reason>", None otherwise.
+        """
+        if self.is_not_applicable and "-" in self.status:
+            return self.status.split("-", 1)[1].strip()
+        return None
+
 
 @dataclass
 class SpecInfo:

@@ -11,25 +11,7 @@ from pathlib import Path
 import yaml
 
 from ldf.utils.console import console
-
-
-def _sanitize_spec_name(name: str) -> str:
-    """Sanitize spec name to prevent path traversal.
-
-    Args:
-        name: Spec name to sanitize
-
-    Returns:
-        The validated spec name
-
-    Raises:
-        ValueError: If the name contains path traversal attempts
-    """
-    if ".." in name or name.startswith("/") or name.startswith("\\"):
-        raise ValueError(f"Invalid spec name: {name}")
-    if "/" in name or "\\" in name:
-        raise ValueError(f"Spec name cannot contain path separators: {name}")
-    return name
+from ldf.utils.spec_utils import sanitize_spec_name
 
 
 @dataclass
@@ -474,7 +456,7 @@ def import_backwards_fill(
     """
     # Sanitize spec name to prevent path traversal
     try:
-        spec_name = _sanitize_spec_name(spec_name)
+        spec_name = sanitize_spec_name(spec_name)
     except ValueError as e:
         result = ImportResult(success=False, spec_name=spec_name)
         result.errors.append(str(e))

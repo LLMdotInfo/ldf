@@ -301,7 +301,7 @@ class TestStatusCommand:
         with runner.isolated_filesystem(temp_dir=tmp_path):
             runner.invoke(cli, ["init", "--yes"])
 
-            result = runner.invoke(cli, ["status", "--json"])
+            result = runner.invoke(cli, ["status", "--format", "json"])
 
             assert result.exit_code == 0
             # Should contain JSON-like output
@@ -830,30 +830,22 @@ class TestMcpHealthCommand:
         assert "{" in result.output
 
 
-class TestListFrameworkCommand:
-    """Tests for 'ldf list-framework' command."""
+class TestListCommands:
+    """Tests for 'ldf list-*' commands."""
 
-    def test_list_framework_presets(self, runner: CliRunner):
-        """Test list-framework presets subcommand."""
-        result = runner.invoke(cli, ["list-framework", "presets"])
+    def test_list_presets(self, runner: CliRunner):
+        """Test list-presets command."""
+        result = runner.invoke(cli, ["list-presets"])
 
         assert result.exit_code == 0
         assert "core" in result.output.lower() or "saas" in result.output.lower()
 
-    def test_list_framework_packs(self, runner: CliRunner):
-        """Test list-framework packs subcommand."""
-        result = runner.invoke(cli, ["list-framework", "packs"])
+    def test_list_packs(self, runner: CliRunner):
+        """Test list-packs command."""
+        result = runner.invoke(cli, ["list-packs"])
 
         assert result.exit_code == 0
         assert "security" in result.output.lower() or "testing" in result.output.lower()
-
-    def test_list_framework_guardrails(self, runner: CliRunner):
-        """Test list-framework guardrails subcommand."""
-        result = runner.invoke(cli, ["list-framework", "guardrails"])
-
-        assert result.exit_code == 0
-        # Should show guardrail content
-        assert "Testing" in result.output or "guardrail" in result.output.lower()
 
 
 class TestPreflightCommand:
@@ -1096,28 +1088,10 @@ class TestCoverageEnhancements:
             )
         )
 
-        result = runner.invoke(cli, ["coverage", "--diff", "baseline"])
+        result = runner.invoke(cli, ["coverage", "--compare", "baseline"])
 
         assert result.exit_code == 0
         assert "Comparison" in result.output or "baseline" in result.output
-
-
-class TestListFrameworkAllSubcommands:
-    """Additional tests for list-framework subcommands."""
-
-    def test_list_framework_mcp(self, runner: CliRunner):
-        """Test list-framework mcp subcommand."""
-        result = runner.invoke(cli, ["list-framework", "mcp"])
-
-        assert result.exit_code == 0
-        assert "Server" in result.output or "spec" in result.output.lower()
-
-    def test_list_framework_default(self, runner: CliRunner):
-        """Test list-framework without subcommand shows help."""
-        result = runner.invoke(cli, ["list-framework", "--help"])
-
-        assert result.exit_code == 0
-        assert "presets" in result.output or "packs" in result.output
 
 
 class TestAdditionalCLICommands:
@@ -1132,8 +1106,8 @@ class TestAdditionalCLICommands:
 
         assert result.exit_code == 0
 
-    def test_coverage_validate(self, runner: CliRunner, temp_project: Path, monkeypatch):
-        """Test coverage --validate flag."""
+    def test_coverage_fail_under(self, runner: CliRunner, temp_project: Path, monkeypatch):
+        """Test coverage --fail-under flag."""
         import json
 
         monkeypatch.chdir(temp_project)
@@ -1145,12 +1119,12 @@ class TestAdditionalCLICommands:
             )
         )
 
-        result = runner.invoke(cli, ["coverage", "--validate"])
+        result = runner.invoke(cli, ["coverage", "--fail-under", "80"])
 
         assert result.exit_code == 0
 
-    def test_coverage_service_filter(self, runner: CliRunner, temp_project: Path, monkeypatch):
-        """Test coverage --service filter."""
+    def test_coverage_spec_filter(self, runner: CliRunner, temp_project: Path, monkeypatch):
+        """Test coverage --spec filter."""
         import json
 
         monkeypatch.chdir(temp_project)
@@ -1169,7 +1143,7 @@ class TestAdditionalCLICommands:
             )
         )
 
-        result = runner.invoke(cli, ["coverage", "--service", "auth"])
+        result = runner.invoke(cli, ["coverage", "--spec", "auth"])
 
         # Should run without error
         assert result.exit_code in (0, 1)
@@ -1257,7 +1231,7 @@ class TestCliEdgeCases:
         monkeypatch.chdir(temp_project)
 
         with patch("ldf.coverage.compare_coverage", return_value={"status": "ERROR"}):
-            result = runner.invoke(cli, ["coverage", "--diff", "baseline"])
+            result = runner.invoke(cli, ["coverage", "--compare", "baseline"])
 
         assert result.exit_code == 1
 
@@ -1287,14 +1261,14 @@ class TestCliEdgeCases:
 
         assert result.exit_code == 1
 
-    def test_coverage_validate_failure(self, runner: CliRunner, temp_project: Path, monkeypatch):
-        """Test coverage --validate returns error on failure."""
+    def test_coverage_fail_under_failure(self, runner: CliRunner, temp_project: Path, monkeypatch):
+        """Test coverage --fail-under returns error on failure."""
         from unittest.mock import patch
 
         monkeypatch.chdir(temp_project)
 
-        with patch("ldf.coverage.report_coverage", return_value={"status": "FAIL"}):
-            result = runner.invoke(cli, ["coverage", "--validate"])
+        with patch("ldf.coverage.report_coverage", return_value={"status": "FAIL", "coverage_pct": 50.0}):
+            result = runner.invoke(cli, ["coverage", "--fail-under", "80"])
 
         assert result.exit_code == 1
 
@@ -1604,21 +1578,6 @@ files: []
 
         # Should output JSON
         assert result.exit_code == 0 or "{" in result.output
-
-
-class TestListFrameworkGuardrailsError:
-    """Tests for list-framework guardrails error handling."""
-
-    def test_list_guardrails_shows_core_guardrails(
-        self, runner: CliRunner, temp_project: Path, monkeypatch
-    ):
-        """Test list-framework guardrails shows core guardrails."""
-        monkeypatch.chdir(temp_project)
-
-        result = runner.invoke(cli, ["list-framework", "guardrails"])
-
-        # Should show guardrails table
-        assert "ID" in result.output or "Name" in result.output or result.exit_code == 0
 
 
 class TestUpdateDeclineConfirmation:

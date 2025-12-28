@@ -958,6 +958,41 @@ Template here.
         # The task checkbox itself counts as a checklist item
         assert len(errors) == 0
 
+    def test_task_with_version_number_in_description(self, tmp_path: Path):
+        """Test task section parsing doesn't break on version numbers like v1.2.
+
+        Regression test: Task 3.4 with description "schema v1.2" was incorrectly
+        truncated because the parser searched for task ID "1.2" as a substring
+        and found it in "v1.2" before finding the actual Task 1.2.
+        """
+        tasks_file = tmp_path / "tasks.md"
+        tasks_file.write_text("""# Tasks
+
+## Per-Task Guardrail Checklist
+
+Template here.
+
+- [ ] **Task 1.1:** Setup infrastructure
+  - [ ] Create project structure
+  - [ ] Add config files
+
+- [ ] **Task 1.2:** Extend config to schema v1.1
+  - [ ] Add new field
+  - [ ] Add migration
+
+- [ ] **Task 2.1:** Implement feature for v2.0
+  - [ ] Write code
+  - [ ] Add tests
+""")
+
+        errors, warnings = _check_tasks(tasks_file, [])
+
+        # No warnings expected - all tasks have checklist items
+        # In particular, Task 1.2 should NOT get "no checklist items" warning
+        # even though Task 1.1 contains "v1.1" which includes "1.1"
+        task_warnings = [w for w in warnings if "no checklist items" in w]
+        assert len(task_warnings) == 0, f"Unexpected warnings: {task_warnings}"
+
 
 class TestCheckAnswerpacks:
     """Tests for _check_answerpacks function."""

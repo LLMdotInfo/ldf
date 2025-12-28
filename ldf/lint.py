@@ -4,20 +4,27 @@ import json
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
+import yaml
 from rich.table import Table
 
 from ldf import __version__
 from ldf.utils.config import get_specs_dir, load_config
 from ldf.utils.console import console
 from ldf.utils.guardrail_loader import Guardrail, get_active_guardrails
+from ldf.utils.logging import get_logger
 from ldf.utils.security import SecurityError, is_safe_directory_entry, validate_spec_name
 from ldf.utils.spec_parser import (
     extract_guardrail_matrix,
     extract_tasks,
     parse_spec,
 )
+
+if TYPE_CHECKING:
+    from ldf.models.workspace import WorkspaceManifest
+
+logger = get_logger(__name__)
 
 # SARIF rule definitions - stable rule IDs for consistent reporting
 SARIF_RULES = {
@@ -74,6 +81,12 @@ SARIF_RULES = {
         "name": "SpecParseError",
         "shortDescription": {"text": "Error parsing spec file"},
         "helpUri": "https://github.com/LLMdotInfo/ldf#spec-format",
+    },
+    "ldf/broken-reference": {
+        "id": "ldf/broken-reference",
+        "name": "BrokenCrossProjectReference",
+        "shortDescription": {"text": "Cross-project reference points to non-existent spec"},
+        "helpUri": "https://github.com/LLMdotInfo/ldf#cross-project-references",
     },
 }
 
@@ -531,17 +544,22 @@ def _check_tasks(filepath: Path, guardrails: list[Guardrail]) -> tuple[list[str]
     else:
         # Check that each task section has checklist items
         for task in tasks:
-            # Look for task section and check for checklist
-            task_header = f"{task.id}"
-            task_start = content.find(task_header)
-            if task_start != -1:
-                # Find next task or end
+            # Look for task section using full task marker pattern
+            # Using regex to avoid false matches on version numbers like "v1.2"
+            task_pattern = rf"\*\*Task\s+{re.escape(task.id)}:"
+            task_match = re.search(task_pattern, content)
+            if task_match:
+                task_start = task_match.start()
+                # Find next task or end using full task marker pattern
                 next_task_pos = len(content)
                 for other_task in tasks:
                     if other_task.id != task.id:
-                        pos = content.find(other_task.id, task_start + 1)
-                        if pos != -1 and pos < next_task_pos:
-                            next_task_pos = pos
+                        other_pattern = rf"\*\*Task\s+{re.escape(other_task.id)}:"
+                        other_match = re.search(other_pattern, content[task_start + 1:])
+                        if other_match:
+                            pos = task_start + 1 + other_match.start()
+                            if pos < next_task_pos:
+                                next_task_pos = pos
 
                 task_section = content[task_start:next_task_pos]
 
@@ -618,20 +636,20 @@ def _validate_guardrail_matrix(
 
     # Validate each matrix row
     for row in matrix:
-        # Check for empty cells
-        if not row.requirements_ref and row.status not in ["N/A", "n/a"]:
+        # Check for empty cells (skip if N/A - including "N/A - reason")
+        if not row.requirements_ref and not row.is_not_applicable:
             warnings.append(f"Guardrail {row.guardrail_id}: Missing requirements reference")
 
-        if not row.design_ref and row.status not in ["N/A", "n/a"]:
+        if not row.design_ref and not row.is_not_applicable:
             warnings.append(f"Guardrail {row.guardrail_id}: Missing design reference")
 
         # Check N/A has justification
-        if row.status.upper().startswith("N/A") and "-" not in row.status:
+        if row.is_not_applicable and not row.justification:
             # N/A without justification
             warnings.append(f"Guardrail {row.guardrail_id}: N/A status needs justification")
 
         # Check owner for non-N/A rows
-        if row.status.upper() not in ["N/A"] and not row.owner:
+        if not row.is_not_applicable and not row.owner:
             warnings.append(f"Guardrail {row.guardrail_id}: Missing owner")
 
     return errors, warnings
@@ -1155,17 +1173,22 @@ def _check_tasks_with_report(
     else:
         # Check that each task section has checklist items
         for task in tasks:
-            # Look for task section and check for checklist
-            task_header = f"{task.id}"
-            task_start = content.find(task_header)
-            if task_start != -1:
-                # Find next task or end
+            # Look for task section using full task marker pattern
+            # Using regex to avoid false matches on version numbers like "v1.2"
+            task_pattern = rf"\*\*Task\s+{re.escape(task.id)}:"
+            task_match = re.search(task_pattern, content)
+            if task_match:
+                task_start = task_match.start()
+                # Find next task or end using full task marker pattern
                 next_task_pos = len(content)
                 for other_task in tasks:
                     if other_task.id != task.id:
-                        pos = content.find(other_task.id, task_start + 1)
-                        if pos != -1 and pos < next_task_pos:
-                            next_task_pos = pos
+                        other_pattern = rf"\*\*Task\s+{re.escape(other_task.id)}:"
+                        other_match = re.search(other_pattern, content[task_start + 1:])
+                        if other_match:
+                            pos = task_start + 1 + other_match.start()
+                            if pos < next_task_pos:
+                                next_task_pos = pos
 
                 task_section = content[task_start:next_task_pos]
 
@@ -1287,8 +1310,8 @@ def _validate_guardrail_matrix_with_report(
 
     # Validate each matrix row
     for row in matrix:
-        # Check for empty cells
-        if not row.requirements_ref and row.status not in ["N/A", "n/a"]:
+        # Check for empty cells (skip if N/A - including "N/A - reason")
+        if not row.requirements_ref and not row.is_not_applicable:
             msg = f"Guardrail {row.guardrail_id}: Missing requirements reference"
             warnings.append(msg)
             results.append(
@@ -1301,7 +1324,7 @@ def _validate_guardrail_matrix_with_report(
                 )
             )
 
-        if not row.design_ref and row.status not in ["N/A", "n/a"]:
+        if not row.design_ref and not row.is_not_applicable:
             msg = f"Guardrail {row.guardrail_id}: Missing design reference"
             warnings.append(msg)
             results.append(
@@ -1315,7 +1338,7 @@ def _validate_guardrail_matrix_with_report(
             )
 
         # Check N/A has justification
-        if row.status.upper().startswith("N/A") and "-" not in row.status:
+        if row.is_not_applicable and not row.justification:
             msg = f"Guardrail {row.guardrail_id}: N/A status needs justification"
             warnings.append(msg)
             results.append(
@@ -1329,7 +1352,7 @@ def _validate_guardrail_matrix_with_report(
             )
 
         # Check owner for non-N/A rows
-        if row.status.upper() not in ["N/A"] and not row.owner:
+        if not row.is_not_applicable and not row.owner:
             msg = f"Guardrail {row.guardrail_id}: Missing owner"
             warnings.append(msg)
             results.append(
@@ -1434,3 +1457,149 @@ def _output_sarif(sarif: dict[str, Any], output_file: str | None) -> None:
         Path(output_file).write_text(sarif_json)
     else:
         print(sarif_json)
+
+
+def validate_spec_references(
+    spec_path: Path,
+    project_root: Path,
+) -> tuple[list[str], list[str]]:
+    """Validate cross-project references in a spec.
+
+    Checks if all @project:spec references point to valid specs
+    in the workspace.
+
+    Args:
+        spec_path: Path to the spec directory
+        project_root: Project root directory
+
+    Returns:
+        Tuple of (errors, warnings) for broken references
+    """
+    from ldf.models.workspace import WorkspaceManifest
+    from ldf.project_resolver import WORKSPACE_MANIFEST
+    from ldf.utils.references import parse_references_from_file, resolve_reference
+
+    errors = []
+    warnings = []
+
+    # Find workspace root
+    workspace_root = None
+    current = project_root.resolve()
+    while current != current.parent:
+        if (current / WORKSPACE_MANIFEST).exists():
+            workspace_root = current
+            break
+        current = current.parent
+
+    if not workspace_root:
+        # Not in a workspace - skip reference validation
+        return errors, warnings
+
+    # Load workspace manifest
+    try:
+        manifest_path = workspace_root / WORKSPACE_MANIFEST
+        with open(manifest_path) as f:
+            data = yaml.safe_load(f) or {}
+        manifest = WorkspaceManifest.from_dict(data)
+    except Exception as e:
+        logger.debug(f"Failed to load workspace manifest: {e}")
+        return errors, warnings
+
+    # Get shared resources path
+    shared_path = workspace_root / manifest.shared.path
+    if not shared_path.exists():
+        shared_path = None
+
+    # Check all markdown files in the spec
+    for md_file in spec_path.glob("*.md"):
+        references = parse_references_from_file(md_file)
+
+        for ref in references:
+            resolved = resolve_reference(ref, workspace_root, manifest, shared_path)
+
+            if not resolved.exists:
+                line_info = f" (line {ref.line_number})" if ref.line_number else ""
+                error_msg = (
+                    f"Broken reference '{ref.raw}' in {md_file.name}{line_info}: "
+                    f"{resolved.error}"
+                )
+                errors.append(error_msg)
+
+    return errors, warnings
+
+
+def lint_workspace_references(
+    workspace_root: Path,
+    output_format: str = "rich",
+) -> int:
+    """Validate all cross-project references in a workspace.
+
+    Args:
+        workspace_root: Workspace root directory
+        output_format: Output format ("rich", "json", "text")
+
+    Returns:
+        Exit code (0 for success, 1 for errors)
+    """
+    from ldf.utils.references import (
+        build_dependency_graph,
+        detect_circular_dependencies,
+        validate_all_workspace_references,
+    )
+
+    all_refs = validate_all_workspace_references(workspace_root)
+
+    # Collect broken references
+    broken_refs = []
+    for project, refs in all_refs.items():
+        for ref in refs:
+            if not ref.exists:
+                broken_refs.append((project, ref))
+
+    # Check for circular dependencies
+    graph = build_dependency_graph(workspace_root)
+    cycles = detect_circular_dependencies(graph)
+
+    if output_format == "json":
+        result = {
+            "broken_references": [
+                {
+                    "project": proj,
+                    "reference": str(ref.reference),
+                    "error": ref.error,
+                }
+                for proj, ref in broken_refs
+            ],
+            "circular_dependencies": cycles,
+            "total_references": sum(len(refs) for refs in all_refs.values()),
+            "broken_count": len(broken_refs),
+        }
+        print(json.dumps(result, indent=2))
+    elif output_format == "text":
+        if broken_refs:
+            print(f"Found {len(broken_refs)} broken reference(s):")
+            for proj, ref in broken_refs:
+                print(f"  [{proj}] {ref.reference}: {ref.error}")
+        if cycles:
+            print(f"\nFound {len(cycles)} circular dependency cycle(s):")
+            for cycle in cycles:
+                print(f"  {' -> '.join(cycle)}")
+        if not broken_refs and not cycles:
+            print("All cross-project references are valid.")
+    else:
+        # Rich output
+        if broken_refs:
+            console.print(f"\n[red]Found {len(broken_refs)} broken reference(s):[/red]")
+            for proj, ref in broken_refs:
+                console.print(f"  [{proj}] [cyan]{ref.reference}[/cyan]: {ref.error}")
+
+        if cycles:
+            console.print(f"\n[red]Found {len(cycles)} circular dependency cycle(s):[/red]")
+            for cycle in cycles:
+                console.print(f"  [yellow]{' → '.join(cycle)}[/yellow]")
+
+        if not broken_refs and not cycles:
+            total = sum(len(refs) for refs in all_refs.values())
+            console.print(f"\n[green]✓ All {total} cross-project reference(s) are valid.[/green]")
+
+    return 1 if broken_refs or cycles else 0

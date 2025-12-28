@@ -191,7 +191,7 @@ ldf init                        # Initialize LDF in current project
 
 # Project status
 ldf status                      # Show project state and recommendations
-ldf status --json               # JSON output for CI/scripts
+ldf status --format json        # JSON output for CI/scripts
 
 # Add LDF to existing projects
 ldf convert analyze             # Analyze codebase, generate AI prompt
@@ -212,7 +212,7 @@ ldf audit --import <file>       # Import audit feedback
 
 # Coverage
 ldf coverage                    # Show coverage summary
-ldf coverage --service auth     # Coverage for specific service
+ldf coverage --spec auth        # Coverage for specific spec
 
 # Framework updates
 ldf update --check              # Check for framework updates

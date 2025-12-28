@@ -5,6 +5,28 @@ All notable changes to LDF (LLM Development Framework) will be documented in thi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2025-12-27
+
+### Added
+
+#### Multi-Project Workspace Support
+- **`ldf-workspace.yaml`** - Workspace manifest for managing multiple LDF projects
+- **`ldf workspace init`** - Initialize a multi-project workspace
+- **`ldf workspace add`** - Add a project to the workspace
+- **`ldf workspace list`** - List all projects in the workspace
+- **`ldf workspace sync`** - Sync all projects in the workspace
+- **Cross-Project References** - Reference specs across projects with `@project:spec#section` syntax
+- **Shared Resources** - Inherit guardrails, templates, and question-packs from `.ldf-shared/`
+- **Workspace-Wide Validation** - Lint and validate across all projects with `--validate-refs`
+
+### Changed
+- Version number now aligns with config schema version (1.1)
+
+### Removed
+- Deprecated CLI flags: `--service`, `--validate`, `--diff`, `--json` on status command
+- `list-framework` command group (use `status` instead)
+- Legacy v1.0 schema support (upgrade projects with `ldf update`)
+
 ## [1.0.0] - 2025-12-26
 
 ### Added
