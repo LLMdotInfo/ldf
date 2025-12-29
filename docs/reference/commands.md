@@ -16,6 +16,7 @@ Quick reference for all LDF commands.
 - [Hooks & Git Integration](#hooks--git-integration)
 - [Templates & Presets](#templates--presets)
 - [Diagnostics & Maintenance](#diagnostics--maintenance)
+- [Workspace Management](#workspace-management)
 - [Common Workflows](#common-workflows)
 
 ---
@@ -601,6 +602,148 @@ Show help for any command.
 ldf --help                              # General help
 ldf init --help                         # Command-specific help
 ldf lint --help
+```
+
+---
+
+## Workspace Management
+
+Commands for managing multi-project workspaces with shared resources.
+
+### `ldf workspace init`
+
+Initialize a new workspace for managing multiple LDF projects.
+
+**Usage:**
+```bash
+ldf workspace init                      # Basic initialization
+ldf workspace init --name my-platform   # With custom name
+ldf workspace init --discover           # Auto-find existing LDF projects
+ldf workspace init --force              # Overwrite existing workspace
+```
+
+**Options:**
+- `--name <name>` - Workspace name (default: directory name)
+- `--discover` - Auto-discover existing LDF projects in subdirectories
+- `--force` - Overwrite existing workspace manifest
+- `--create-shared` - Create `.ldf-shared/` directory (default: true)
+
+**What it creates:**
+```
+ldf-workspace.yaml           # Workspace manifest
+.ldf-shared/                 # Shared resources
+├── guardrails/              # Shared guardrail definitions
+├── templates/               # Shared spec templates
+├── question-packs/          # Shared question-packs
+└── macros/                  # Shared macro definitions
+.ldf-workspace/              # Internal state cache
+```
+
+---
+
+### `ldf workspace list`
+
+List all projects in the workspace.
+
+**Usage:**
+```bash
+ldf workspace list                      # Rich table output
+ldf workspace list --format json        # JSON for scripting
+ldf workspace list --format text        # Plain text
+```
+
+**Output:**
+```
+Workspace: my-platform
+Root: /path/to/workspace
+
+┌────────┬────────────────┬─────────┬─────────┐
+│ Alias  │ Path           │ State   │ Version │
+├────────┼────────────────┼─────────┼─────────┤
+│ auth   │ services/auth  │ current │ 1.0.0   │
+│ billing│ services/billing│ current │ 1.0.0   │
+└────────┴────────────────┴─────────┴─────────┘
+```
+
+---
+
+### `ldf workspace add`
+
+Add a project to the workspace.
+
+**Usage:**
+```bash
+ldf workspace add ./services/auth            # Add with auto-generated alias
+ldf workspace add ./billing -a billing       # Add with custom alias
+```
+
+**Options:**
+- `--alias, -a` - Custom alias for the project (default: directory name)
+
+---
+
+### `ldf workspace sync`
+
+Synchronize workspace state and validate references.
+
+**Usage:**
+```bash
+ldf workspace sync                           # Full sync
+ldf workspace sync --no-validate-refs        # Skip reference validation
+```
+
+**Options:**
+- `--rebuild-registry` - Rebuild project registry cache (default: true)
+- `--validate-refs` - Validate cross-project references (default: true)
+
+---
+
+### `ldf workspace report`
+
+Generate aggregated workspace report.
+
+**Usage:**
+```bash
+ldf workspace report                         # Rich terminal output
+ldf workspace report --format json           # JSON for automation
+ldf workspace report --format html -o report.html  # HTML dashboard
+```
+
+---
+
+### `ldf workspace graph`
+
+Generate project dependency graph from cross-project references.
+
+**Usage:**
+```bash
+ldf workspace graph                          # Mermaid diagram
+ldf workspace graph --format dot             # Graphviz DOT format
+ldf workspace graph --format json            # JSON for tooling
+ldf workspace graph -o deps.md               # Write to file
+```
+
+---
+
+### `ldf workspace validate-refs`
+
+Validate all cross-project spec references.
+
+**Usage:**
+```bash
+ldf workspace validate-refs                  # Rich output
+ldf workspace validate-refs --format json    # JSON for scripting
+```
+
+---
+
+### Environment Variable: `LDF_PROJECT`
+
+Set the active project when running commands from a workspace.
+
+```bash
+export LDF_PROJECT=auth
+ldf lint --all  # Runs lint in the 'auth' project
 ```
 
 ---

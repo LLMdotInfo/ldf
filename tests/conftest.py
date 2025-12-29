@@ -31,8 +31,10 @@ guardrails:
   custom: []
 
 question_packs:
-  - core/security
-  - core/testing
+  core:
+    - security
+  optional:
+    - testing
 
 coverage:
   default_threshold: 80

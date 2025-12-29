@@ -118,7 +118,7 @@ jobs:
           name: coverage-report
 
       - name: Validate coverage
-        run: ldf coverage --validate
+        run: ldf coverage --fail-under 80
 
   # Optional: Automated audit with OpenAI
   # Prerequisites:

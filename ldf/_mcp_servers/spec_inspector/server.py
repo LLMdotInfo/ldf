@@ -145,6 +145,10 @@ def _validate_spec_name(spec_name: str) -> Path:
     Raises:
         ValueError: If spec_name contains path traversal or escapes specs_dir
     """
+    # Reject empty or whitespace-only names
+    if not spec_name or not spec_name.strip():
+        raise ValueError("Spec name cannot be empty")
+
     # Reject obvious traversal attempts
     if ".." in spec_name or spec_name.startswith("/") or spec_name.startswith("\\"):
         raise ValueError(f"Invalid spec name (path traversal detected): {spec_name}")

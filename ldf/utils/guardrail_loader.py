@@ -96,24 +96,62 @@ def load_preset_guardrails(preset: str) -> list[Guardrail]:
     return guardrails
 
 
-def load_guardrails(project_root: Path | None = None) -> list[Guardrail]:
+def load_shared_guardrails(shared_resources_path: Path) -> list[Guardrail]:
+    """Load guardrails from workspace shared resources.
+
+    Args:
+        shared_resources_path: Path to .ldf-shared/ directory
+
+    Returns:
+        List of shared Guardrail objects
+    """
+    guardrails_dir = shared_resources_path / "guardrails"
+    if not guardrails_dir.exists():
+        return []
+
+    guardrails = []
+    for yaml_file in sorted(guardrails_dir.glob("*.yaml")):
+        try:
+            with open(yaml_file) as f:
+                data = yaml.safe_load(f) or {}
+
+            for item in data.get("guardrails", []):
+                guardrails.append(Guardrail.from_dict(item))
+
+            logger.debug(f"Loaded shared guardrails from {yaml_file}")
+        except Exception as e:
+            logger.warning(f"Failed to load shared guardrails from {yaml_file}: {e}")
+
+    return guardrails
+
+
+def load_guardrails(
+    project_root: Path | None = None,
+    shared_resources_path: Path | None = None,
+) -> list[Guardrail]:
     """Load all active guardrails for a project.
 
-    Combines:
+    Combines (in order of precedence, later overrides earlier):
     1. Core guardrails (always loaded)
     2. Preset guardrails (if configured)
-    3. Custom guardrails (if defined)
+    3. Shared workspace guardrails (if in workspace with .ldf-shared/)
+    4. Custom guardrails (if defined)
 
     Applies overrides and disabled list from project config.
 
     Args:
         project_root: Project root directory
+        shared_resources_path: Path to workspace .ldf-shared/ directory (optional)
 
     Returns:
         List of all active Guardrail objects
     """
     if project_root is None:
         project_root = Path.cwd()
+
+    # Auto-detect shared resources path if not provided
+    if shared_resources_path is None:
+        shared_resources_path = _detect_shared_resources_path(project_root)
 
     # Load core guardrails
     guardrails = load_core_guardrails()
@@ -129,6 +167,20 @@ def load_guardrails(project_root: Path | None = None) -> list[Guardrail]:
         if preset and preset != "custom":
             preset_guardrails = load_preset_guardrails(preset)
             guardrails.extend(preset_guardrails)
+
+        # Load shared workspace guardrails (if available and not disabled)
+        workspace_config = project_config.get("workspace", {})
+        inherit_guardrails = workspace_config.get("inherit_guardrails", True)
+
+        if shared_resources_path and inherit_guardrails:
+            if inherit_guardrails == "none":
+                logger.debug("Shared guardrails disabled by project config")
+            else:
+                shared_guardrails = load_shared_guardrails(shared_resources_path)
+                if shared_guardrails:
+                    logger.debug(f"Loaded {len(shared_guardrails)} shared guardrails")
+                    # Merge shared guardrails - shared can add new or override existing
+                    guardrails = _merge_guardrails(guardrails, shared_guardrails)
 
         # Apply overrides
         overrides = project_config.get("overrides", {})
@@ -163,6 +215,79 @@ def load_guardrails(project_root: Path | None = None) -> list[Guardrail]:
         )
 
     return guardrails
+
+
+def _merge_guardrails(base: list[Guardrail], overlay: list[Guardrail]) -> list[Guardrail]:
+    """Merge two lists of guardrails, with overlay taking precedence.
+
+    Args:
+        base: Base guardrails list
+        overlay: Overlay guardrails that can override or extend base
+
+    Returns:
+        Merged list of guardrails
+    """
+    # Index base guardrails by ID
+    result_by_id = {g.id: g for g in base}
+
+    # Apply overlay - update existing or add new
+    for guardrail in overlay:
+        if guardrail.id in result_by_id:
+            # Overlay updates existing guardrail
+            existing = result_by_id[guardrail.id]
+            existing.enabled = guardrail.enabled
+            existing.config.update(guardrail.config)
+            if guardrail.checklist:
+                existing.checklist = guardrail.checklist
+        else:
+            # New guardrail from overlay
+            result_by_id[guardrail.id] = guardrail
+
+    return list(result_by_id.values())
+
+
+def detect_shared_resources_path(project_root: Path) -> Path | None:
+    """Auto-detect shared resources path by looking for workspace manifest.
+
+    Reads the shared.path configuration from ldf-workspace.yaml if present,
+    otherwise falls back to the default .ldf-shared directory.
+
+    Args:
+        project_root: Project root directory
+
+    Returns:
+        Path to shared resources directory if found, None otherwise
+    """
+    import yaml
+
+    from ldf.project_resolver import WORKSPACE_MANIFEST
+
+    current = project_root.resolve()
+
+    while current != current.parent:
+        manifest_path = current / WORKSPACE_MANIFEST
+        if manifest_path.exists():
+            # Found workspace, read shared path from manifest
+            try:
+                with open(manifest_path) as f:
+                    data = yaml.safe_load(f) or {}
+                shared_path_str = data.get("shared", {}).get("path", ".ldf-shared")
+                # Remove trailing slash for consistent path handling
+                shared_path = current / shared_path_str.rstrip("/")
+            except Exception:
+                # Fall back to default if manifest parsing fails
+                shared_path = current / ".ldf-shared"
+
+            if shared_path.exists():
+                return shared_path
+            return None
+        current = current.parent
+
+    return None
+
+
+# Alias for internal use (backwards compatibility)
+_detect_shared_resources_path = detect_shared_resources_path
 
 
 def get_active_guardrails(project_root: Path | None = None) -> list[Guardrail]:

@@ -113,10 +113,8 @@ def check_for_updates(project_root: Path) -> UpdateInfo:
         UpdateInfo with version comparison and available components.
     """
     config = load_project_config(project_root)
-    # Support both v1.1 schema (ldf.version) and legacy (framework_version)
-    current_version = config.get("ldf", {}).get("version") or config.get(
-        "framework_version", "0.0.0"
-    )
+    # Get current version from ldf.version (v1.1 schema)
+    current_version = config.get("ldf", {}).get("version", "0.0.0")
     latest_version = __version__
 
     # Determine if updates are available
@@ -236,14 +234,9 @@ def _diff_question_packs(project_root: Path, config: dict, diff: UpdateDiff) -> 
     if not dest_dir.exists():
         return
 
-    # Get configured question packs - handle both flat list and v1.1 dict structure
-    qp_config = config.get("question_packs", [])
-    if isinstance(qp_config, dict):
-        # v1.1 schema: {core: [...], optional: [...]}
-        configured_packs = qp_config.get("core", []) + qp_config.get("optional", [])
-    else:
-        # Legacy flat list
-        configured_packs = qp_config
+    # Get configured question packs (v1.1 schema: {core: [...], optional: [...]})
+    qp_config = config.get("question_packs", {})
+    configured_packs = qp_config.get("core", []) + qp_config.get("optional", [])
 
     source_core = FRAMEWORK_DIR / "question-packs" / "core"
     source_domain = FRAMEWORK_DIR / "question-packs" / "domain"
@@ -257,27 +250,14 @@ def _diff_question_packs(project_root: Path, config: dict, diff: UpdateDiff) -> 
             dest_subdir = "optional"
 
         # v1.1 schema: files are in core/ or optional/ subdirectories
-        dest_file_v11 = dest_dir / dest_subdir / f"{pack_name}.yaml"
-        # Legacy: files directly in question-packs/
-        dest_file_legacy = dest_dir / f"{pack_name}.yaml"
-
-        # Check which path exists
-        if dest_file_v11.exists():
-            dest_file = dest_file_v11
-            relative_path = f"question-packs/{dest_subdir}/{pack_name}.yaml"
-        elif dest_file_legacy.exists():
-            dest_file = dest_file_legacy
-            relative_path = f"question-packs/{pack_name}.yaml"
-        else:
-            dest_file = None
-            # For new files, use v1.1 path
-            relative_path = f"question-packs/{dest_subdir}/{pack_name}.yaml"
+        dest_file = dest_dir / dest_subdir / f"{pack_name}.yaml"
+        relative_path = f"question-packs/{dest_subdir}/{pack_name}.yaml"
 
         if not source_file.exists():
             # No framework source for this pack
             continue
 
-        if dest_file is None:
+        if not dest_file.exists():
             # Pack doesn't exist in project - add it
             diff.files_to_add.append(
                 FileChange(
@@ -393,8 +373,10 @@ def apply_updates(
 
     # Update config with new version and checksums
     if not dry_run and result.success:
-        config["framework_version"] = __version__
-        config["framework_updated"] = datetime.now().isoformat()
+        if "ldf" not in config:
+            config["ldf"] = {}
+        config["ldf"]["version"] = __version__
+        config["ldf"]["updated"] = datetime.now().isoformat()
         config["_checksums"] = checksums
         save_project_config(project_root, config)
 
@@ -419,21 +401,12 @@ def _copy_framework_file(ldf_dir: Path, relative_path: str, checksums: dict) -> 
     elif component == "macros":
         source = FRAMEWORK_DIR / "macros" / filename
     elif component == "question-packs":
-        # Handle both v1.1 paths (question-packs/core/security.yaml)
-        # and legacy paths (question-packs/security.yaml)
-        if filename.startswith("core/") or filename.startswith("optional/"):
-            # v1.1 path: question-packs/core/security.yaml
-            # Map optional/ to domain/ in framework source
-            if filename.startswith("optional/"):
-                source = FRAMEWORK_DIR / "question-packs" / "domain" / filename[9:]
-            else:
-                source = FRAMEWORK_DIR / "question-packs" / filename
+        # v1.1 paths: question-packs/core/security.yaml or question-packs/optional/security.yaml
+        # Map optional/ to domain/ in framework source
+        if filename.startswith("optional/"):
+            source = FRAMEWORK_DIR / "question-packs" / "domain" / filename[9:]
         else:
-            # Legacy path: question-packs/security.yaml
-            # Check core first, then domain
-            source = FRAMEWORK_DIR / "question-packs" / "core" / filename
-            if not source.exists():
-                source = FRAMEWORK_DIR / "question-packs" / "domain" / filename
+            source = FRAMEWORK_DIR / "question-packs" / filename
     else:
         raise ValueError(f"Unknown component: {component}")
 

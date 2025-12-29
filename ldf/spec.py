@@ -4,26 +4,61 @@ from pathlib import Path
 
 from ldf.utils.config import get_answerpacks_dir, get_specs_dir, get_templates_dir
 from ldf.utils.console import console
-from ldf.utils.security import SecurityError, is_safe_directory_entry, validate_spec_path_safe
+from ldf.utils.guardrail_loader import detect_shared_resources_path
+from ldf.utils.logging import get_logger
+from ldf.utils.security import (
+    SecurityError,
+    is_safe_directory_entry,
+    validate_spec_name,
+    validate_spec_path_safe,
+)
+from ldf.utils.spec_utils import sanitize_spec_name
+
+logger = get_logger(__name__)
 
 
-def _sanitize_spec_name(name: str) -> str:
-    """Sanitize spec name to prevent path traversal.
+def _resolve_template(
+    template_name: str,
+    project_root: Path,
+    shared_resources_path: Path | None = None,
+) -> Path | None:
+    """Resolve a template file using fallback chain.
+
+    Resolution order:
+    1. Project templates: {project}/.ldf/templates/{template_name}
+    2. Shared templates: {workspace}/.ldf-shared/templates/{template_name}
+    3. Framework templates (built-in fallback)
 
     Args:
-        name: Spec name to sanitize
+        template_name: Name of the template file (e.g., "requirements.md")
+        project_root: Project root directory
+        shared_resources_path: Path to workspace .ldf-shared/ (optional)
 
     Returns:
-        The validated spec name
-
-    Raises:
-        ValueError: If the name contains path traversal attempts
+        Path to the resolved template, or None if not found
     """
-    if ".." in name or name.startswith("/") or name.startswith("\\"):
-        raise ValueError(f"Invalid spec name: {name}")
-    if "/" in name or "\\" in name:
-        raise ValueError(f"Spec name cannot contain path separators: {name}")
-    return name
+    # 1. Check project templates first
+    project_template = project_root / ".ldf" / "templates" / template_name
+    if project_template.exists():
+        logger.debug(f"Using project template: {project_template}")
+        return project_template
+
+    # 2. Check shared workspace templates
+    if shared_resources_path:
+        shared_template = shared_resources_path / "templates" / template_name
+        if shared_template.exists():
+            logger.debug(f"Using shared template: {shared_template}")
+            return shared_template
+
+    # 3. Check framework templates (built-in)
+    from ldf.init import FRAMEWORK_DIR
+
+    framework_template = FRAMEWORK_DIR / "templates" / template_name
+    if framework_template.exists():
+        logger.debug(f"Using framework template: {framework_template}")
+        return framework_template
+
+    return None
 
 
 def create_spec(name: str, project_root: Path | None = None) -> bool:
@@ -35,6 +70,11 @@ def create_spec(name: str, project_root: Path | None = None) -> bool:
     - .ldf/specs/{name}/tasks.md
     - .ldf/answerpacks/{name}/
 
+    Templates are resolved using a fallback chain:
+    1. Project templates ({project}/.ldf/templates/)
+    2. Shared templates ({workspace}/.ldf-shared/templates/)
+    3. Framework templates (built-in)
+
     Args:
         name: Name of the spec to create (e.g., "user-auth")
         project_root: Project root directory (defaults to cwd)
@@ -45,14 +85,7 @@ def create_spec(name: str, project_root: Path | None = None) -> bool:
     if project_root is None:
         project_root = Path.cwd()
 
-    # Sanitize spec name to prevent path traversal
-    try:
-        name = _sanitize_spec_name(name)
-    except ValueError as e:
-        console.print(f"[red]Error: {e}[/red]")
-        return False
-
-    # Check LDF is initialized
+    # Check LDF is initialized first (needed for validate_spec_name)
     ldf_dir = project_root / ".ldf"
     if not ldf_dir.exists():
         console.print("[red]Error: LDF not initialized.[/red]")
@@ -62,7 +95,17 @@ def create_spec(name: str, project_root: Path | None = None) -> bool:
     # Get directories
     specs_dir = get_specs_dir(project_root)
     answerpacks_dir = get_answerpacks_dir(project_root)
-    templates_dir = get_templates_dir(project_root)
+
+    # Validate spec name using the comprehensive security validator
+    # (handles hidden dirs, symlinks, Windows paths, empty strings, etc.)
+    try:
+        validate_spec_name(name, specs_dir)
+    except SecurityError as e:
+        console.print(f"[red]Error: {e}[/red]")
+        return False
+
+    # Detect shared resources path for template fallback
+    shared_resources_path = detect_shared_resources_path(project_root)
 
     # Check if spec already exists
     spec_dir = specs_dir / name
@@ -75,13 +118,15 @@ def create_spec(name: str, project_root: Path | None = None) -> bool:
     spec_dir.mkdir(parents=True, exist_ok=True)
     console.print(f"[green]✓[/green] Created spec directory: .ldf/specs/{name}/")
 
-    # Copy templates
+    # Copy templates using fallback chain
     template_files = ["requirements.md", "design.md", "tasks.md"]
     for template_name in template_files:
-        template_path = templates_dir / template_name
         dest_path = spec_dir / template_name
 
-        if template_path.exists():
+        # Resolve template using fallback chain
+        template_path = _resolve_template(template_name, project_root, shared_resources_path)
+
+        if template_path:
             # Read template and replace placeholders
             content = template_path.read_text()
             content = content.replace("{feature-name}", name)
@@ -91,9 +136,16 @@ def create_spec(name: str, project_root: Path | None = None) -> bool:
             content = content.replace("{{feature}}", name)
             content = content.replace("{{Feature Name}}", name)
             dest_path.write_text(content)
-            console.print(f"[green]✓[/green] Created {template_name}")
+
+            # Indicate source of template
+            if ".ldf-shared" in str(template_path):
+                console.print(f"[green]✓[/green] Created {template_name} [dim](from shared)[/dim]")
+            elif "/_framework/" in str(template_path):
+                console.print(f"[green]✓[/green] Created {template_name} [dim](from framework)[/dim]")
+            else:
+                console.print(f"[green]✓[/green] Created {template_name}")
         else:
-            # Create minimal file if template doesn't exist
+            # Create minimal file if template doesn't exist anywhere
             section_title = template_name.replace(".md", "").title()
             dest_path.write_text(f"# {name} - {section_title}\n\nTODO: Fill in this section.\n")
             console.print(

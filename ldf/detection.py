@@ -45,6 +45,12 @@ class DetectionResult:
     has_agent_md: bool
     has_agent_commands: bool
 
+    # Workspace info (None if not in a workspace)
+    workspace_root: Path | None = None
+    is_workspace_member: bool = False
+    project_alias: str | None = None
+    shared_resources_path: Path | None = None
+
     # Missing/invalid items
     missing_files: list[str] = field(default_factory=list)
     invalid_files: list[str] = field(default_factory=list)
@@ -55,7 +61,7 @@ class DetectionResult:
 
     def to_dict(self) -> dict:
         """Convert to dictionary for JSON output."""
-        return {
+        result = {
             "state": self.state.value,
             "project_root": str(self.project_root),
             "installed_version": self.installed_version,
@@ -76,6 +82,19 @@ class DetectionResult:
             "recommended_action": self.recommended_action,
             "recommended_command": self.recommended_command,
         }
+
+        # Add workspace info if in a workspace
+        if self.is_workspace_member:
+            result["workspace"] = {
+                "workspace_root": str(self.workspace_root) if self.workspace_root else None,
+                "is_workspace_member": self.is_workspace_member,
+                "project_alias": self.project_alias,
+                "shared_resources_path": str(self.shared_resources_path)
+                if self.shared_resources_path
+                else None,
+            }
+
+        return result
 
     def to_json(self) -> str:
         """Convert to JSON string."""
@@ -255,6 +274,11 @@ def detect_project_state(project_root: Path | None = None) -> DetectionResult:
                 recommended_action = "LDF is up to date. No action needed."
                 recommended_command = None
 
+    # Detect workspace context
+    workspace_root, is_workspace_member, project_alias, shared_resources_path = (
+        _detect_workspace_context(project_root)
+    )
+
     return DetectionResult(
         state=state,
         project_root=project_root,
@@ -269,6 +293,10 @@ def detect_project_state(project_root: Path | None = None) -> DetectionResult:
         has_macros=has_macros,
         has_agent_md=has_agent_md,
         has_agent_commands=has_agent_commands,
+        workspace_root=workspace_root,
+        is_workspace_member=is_workspace_member,
+        project_alias=project_alias,
+        shared_resources_path=shared_resources_path,
         missing_files=missing_files,
         invalid_files=invalid_files,
         recommended_action=recommended_action,
@@ -369,3 +397,147 @@ def get_specs_summary(ldf_dir: Path) -> list[dict]:
         specs.append(spec_info)
 
     return sorted(specs, key=lambda x: x["name"])
+
+
+def _detect_workspace_context(
+    project_root: Path,
+) -> tuple[Path | None, bool, str | None, Path | None]:
+    """Detect workspace context for a project.
+
+    Walks up from project_root looking for ldf-workspace.yaml and determines
+    if the project is part of a workspace.
+
+    Args:
+        project_root: Path to the project directory
+
+    Returns:
+        Tuple of (workspace_root, is_workspace_member, project_alias, shared_resources_path)
+        All values are None/False if not in a workspace.
+    """
+    from ldf.project_resolver import WORKSPACE_MANIFEST
+
+    # Walk up looking for workspace manifest
+    current = project_root.resolve()
+
+    while current != current.parent:
+        manifest_path = current / WORKSPACE_MANIFEST
+        if manifest_path.exists():
+            # Found a workspace, try to load it
+            try:
+                from ldf.models.workspace import WorkspaceManifest
+
+                with open(manifest_path) as f:
+                    data = yaml.safe_load(f) or {}
+                manifest = WorkspaceManifest.from_dict(data)
+
+                # Check if this project is in the workspace
+                for entry in manifest.get_all_project_entries(current):
+                    entry_path = (current / entry.path).resolve()
+                    try:
+                        # Check if project_root is within or equal to entry_path
+                        project_root.resolve().relative_to(entry_path)
+                        # Found our project in the workspace
+                        shared_path = None
+                        if manifest.shared.inherit_guardrails or manifest.shared.inherit_templates:
+                            potential_shared = current / manifest.shared.path
+                            if potential_shared.exists():
+                                shared_path = potential_shared
+
+                        return current, True, entry.alias, shared_path
+                    except ValueError:
+                        continue
+
+                # Workspace exists but project not registered in it
+                # Still return workspace_root for context but is_workspace_member=False
+                return current, False, None, None
+
+            except Exception:
+                # Failed to parse workspace - continue without workspace context
+                return None, False, None, None
+
+        current = current.parent
+
+    # No workspace found
+    return None, False, None, None
+
+
+def detect_workspace_state(workspace_root: Path) -> dict:
+    """Detect the state of a workspace.
+
+    Args:
+        workspace_root: Path to workspace root (containing ldf-workspace.yaml)
+
+    Returns:
+        Dictionary with workspace state information including:
+        - name: Workspace name
+        - projects: List of project info dicts
+        - shared: Shared resources info
+        - status: Overall workspace health status
+    """
+    from ldf.project_resolver import WORKSPACE_MANIFEST
+
+    manifest_path = workspace_root / WORKSPACE_MANIFEST
+
+    if not manifest_path.exists():
+        return {
+            "status": "not_found",
+            "error": f"No {WORKSPACE_MANIFEST} found at {workspace_root}",
+        }
+
+    try:
+        from ldf.models.workspace import WorkspaceManifest
+
+        with open(manifest_path) as f:
+            data = yaml.safe_load(f) or {}
+        manifest = WorkspaceManifest.from_dict(data)
+
+        # Gather project info
+        projects = []
+        for entry in manifest.get_all_project_entries(workspace_root):
+            project_path = (workspace_root / entry.path).resolve()
+            project_info = {
+                "alias": entry.alias,
+                "path": entry.path,
+                "exists": project_path.exists(),
+                "has_ldf": (project_path / ".ldf" / "config.yaml").exists(),
+            }
+
+            # Get basic detection if project exists
+            if project_info["has_ldf"]:
+                detection = detect_project_state(project_path)
+                project_info["state"] = detection.state.value
+                project_info["version"] = detection.project_version
+            else:
+                project_info["state"] = "new" if project_info["exists"] else "missing"
+                project_info["version"] = None
+
+            projects.append(project_info)
+
+        # Check shared resources
+        shared_path = workspace_root / manifest.shared.path
+        shared_info = {
+            "path": manifest.shared.path,
+            "exists": shared_path.exists(),
+            "inherit_guardrails": manifest.shared.inherit_guardrails,
+            "inherit_templates": manifest.shared.inherit_templates,
+        }
+
+        if shared_path.exists():
+            shared_info["has_guardrails"] = (shared_path / "guardrails").is_dir()
+            shared_info["has_templates"] = (shared_path / "templates").is_dir()
+
+        return {
+            "status": "ok",
+            "name": manifest.name,
+            "version": manifest.version,
+            "projects": projects,
+            "shared": shared_info,
+            "references_enabled": manifest.references.enabled,
+            "reporting_enabled": manifest.reporting.enabled,
+        }
+
+    except Exception as e:
+        return {
+            "status": "error",
+            "error": f"Failed to parse workspace manifest: {e}",
+        }

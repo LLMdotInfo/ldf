@@ -682,3 +682,219 @@ class TestGetSpecsSummarySymlinkSecurity:
         # Should filter out the escaping symlink
         spec_names = [s["name"] for s in summary]
         assert "escape-attempt" not in spec_names
+
+
+class TestDetectWorkspaceState:
+    """Tests for detect_workspace_state function."""
+
+    def test_no_manifest_returns_not_found(self, tmp_path):
+        """Test returns not_found when no manifest exists."""
+        from ldf.detection import detect_workspace_state
+
+        result = detect_workspace_state(tmp_path)
+
+        assert result["status"] == "not_found"
+        assert "error" in result
+
+    def test_valid_workspace_with_no_projects(self, tmp_path):
+        """Test valid workspace with no projects."""
+        from ldf.detection import detect_workspace_state
+
+        # Create workspace manifest
+        manifest = tmp_path / "ldf-workspace.yaml"
+        manifest.write_text("""
+version: "1.0"
+name: empty-workspace
+projects:
+  explicit: []
+""")
+
+        result = detect_workspace_state(tmp_path)
+
+        assert result["status"] == "ok"
+        assert result["name"] == "empty-workspace"
+        assert result["projects"] == []
+
+    def test_workspace_with_valid_project(self, tmp_path):
+        """Test workspace with a valid initialized project."""
+        from ldf.detection import detect_workspace_state
+
+        # Create workspace manifest
+        manifest = tmp_path / "ldf-workspace.yaml"
+        manifest.write_text("""
+version: "1.0"
+name: test-workspace
+projects:
+  explicit:
+    - path: services/auth
+      alias: auth
+shared:
+  path: .ldf-shared/
+""")
+
+        # Create a valid LDF project
+        auth_project = tmp_path / "services" / "auth"
+        ldf_dir = auth_project / ".ldf"
+        ldf_dir.mkdir(parents=True)
+        (ldf_dir / "config.yaml").write_text("""
+_schema_version: "1.1"
+project:
+  name: auth-service
+  version: "1.0.0"
+""")
+
+        result = detect_workspace_state(tmp_path)
+
+        assert result["status"] == "ok"
+        assert result["name"] == "test-workspace"
+        assert len(result["projects"]) == 1
+        assert result["projects"][0]["alias"] == "auth"
+        assert result["projects"][0]["has_ldf"] is True
+
+    def test_workspace_with_missing_project(self, tmp_path):
+        """Test workspace with project that doesn't exist."""
+        from ldf.detection import detect_workspace_state
+
+        # Create workspace manifest
+        manifest = tmp_path / "ldf-workspace.yaml"
+        manifest.write_text("""
+version: "1.0"
+name: test-workspace
+projects:
+  explicit:
+    - path: services/missing
+      alias: missing
+""")
+
+        result = detect_workspace_state(tmp_path)
+
+        assert result["status"] == "ok"
+        assert len(result["projects"]) == 1
+        assert result["projects"][0]["exists"] is False
+
+    def test_workspace_with_shared_resources(self, tmp_path):
+        """Test workspace detects shared resources."""
+        from ldf.detection import detect_workspace_state
+
+        # Create workspace manifest
+        manifest = tmp_path / "ldf-workspace.yaml"
+        manifest.write_text("""
+version: "1.0"
+name: test-workspace
+projects:
+  explicit: []
+shared:
+  path: .ldf-shared/
+""")
+
+        # Create shared resources
+        shared = tmp_path / ".ldf-shared"
+        shared.mkdir()
+        (shared / "guardrails").mkdir()
+        (shared / "templates").mkdir()
+
+        result = detect_workspace_state(tmp_path)
+
+        assert result["status"] == "ok"
+        assert result["shared"]["exists"] is True
+
+
+class TestDetectWorkspaceContext:
+    """Tests for detect_workspace_context function."""
+
+    def test_not_in_workspace(self, tmp_path):
+        """Test project not in any workspace."""
+        from ldf.detection import _detect_workspace_context
+
+        # Create a standalone project
+        project = tmp_path / "standalone"
+        project.mkdir()
+
+        result = _detect_workspace_context(project)
+
+        assert result == (None, False, None, None)
+
+    def test_project_in_workspace(self, tmp_path):
+        """Test project that is in a workspace."""
+        from ldf.detection import _detect_workspace_context
+
+        # Create workspace
+        workspace = tmp_path / "workspace"
+        workspace.mkdir()
+
+        manifest = workspace / "ldf-workspace.yaml"
+        manifest.write_text("""
+version: "1.0"
+name: test-workspace
+projects:
+  explicit:
+    - path: services/auth
+      alias: auth
+shared:
+  path: .ldf-shared/
+  inherit:
+    guardrails: true
+    templates: true
+""")
+
+        # Create shared resources
+        shared = workspace / ".ldf-shared"
+        shared.mkdir()
+
+        # Create project
+        auth_project = workspace / "services" / "auth"
+        auth_project.mkdir(parents=True)
+
+        workspace_root, is_member, alias, shared_path = _detect_workspace_context(auth_project)
+
+        assert workspace_root == workspace
+        assert is_member is True
+        assert alias == "auth"
+        assert shared_path == shared
+
+    def test_project_not_registered_in_workspace(self, tmp_path):
+        """Test project exists in workspace dir but not registered."""
+        from ldf.detection import _detect_workspace_context
+
+        # Create workspace
+        workspace = tmp_path / "workspace"
+        workspace.mkdir()
+
+        manifest = workspace / "ldf-workspace.yaml"
+        manifest.write_text("""
+version: "1.0"
+name: test-workspace
+projects:
+  explicit:
+    - path: services/auth
+      alias: auth
+""")
+
+        # Create unregistered project
+        unregistered = workspace / "services" / "unregistered"
+        unregistered.mkdir(parents=True)
+
+        workspace_root, is_member, alias, shared_path = _detect_workspace_context(unregistered)
+
+        assert workspace_root == workspace
+        assert is_member is False
+        assert alias is None
+
+    def test_malformed_workspace_manifest(self, tmp_path):
+        """Test handling of malformed workspace manifest."""
+        from ldf.detection import _detect_workspace_context
+
+        # Create workspace with bad manifest
+        workspace = tmp_path / "workspace"
+        workspace.mkdir()
+
+        manifest = workspace / "ldf-workspace.yaml"
+        manifest.write_text("not: valid: yaml: content: [[[")
+
+        project = workspace / "services" / "auth"
+        project.mkdir(parents=True)
+
+        # Should return None on parse error
+        workspace_root, is_member, alias, shared_path = _detect_workspace_context(project)
+
+        assert workspace_root is None

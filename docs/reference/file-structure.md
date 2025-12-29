@@ -648,6 +648,38 @@ rationale:
 
 ---
 
+## Multi-Project Setups
+
+When working with multiple LDF projects (e.g., in a VS Code multi-root workspace), each project maintains its own independent `.ldf/` directory. The CLI operates on one project at a time based on the current working directory.
+
+### Multiple Projects Structure
+
+```
+workspace/
+├── project-a/
+│   ├── .ldf/               # Project A's LDF configuration
+│   │   ├── config.yaml
+│   │   ├── guardrails.yaml
+│   │   └── specs/
+│   └── src/
+├── project-b/
+│   ├── .ldf/               # Project B's LDF configuration (independent)
+│   │   ├── config.yaml
+│   │   ├── guardrails.yaml
+│   │   └── specs/
+│   └── src/
+└── my-workspace.code-workspace   # VS Code multi-root workspace file
+```
+
+### Key Points
+
+- **Independent configurations:** Each project has its own `.ldf/config.yaml` and `guardrails.yaml`
+- **No cross-project references:** Specs cannot reference specs in other projects
+- **CLI context:** Run `ldf` commands from within the specific project directory
+- **VS Code integration:** The LDF VS Code extension handles multi-root workspaces automatically
+
+---
+
 ## Related Documentation
 
 - **[Command Reference](commands.md)** - Commands that work with these files

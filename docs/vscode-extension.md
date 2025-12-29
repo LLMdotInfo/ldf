@@ -36,8 +36,8 @@ Full documentation is available in the extension repository:
 |---------|-------------|
 | `LDF: Create New Spec` | Create a new spec |
 | `LDF: Lint Spec` | Lint a specific spec |
-| `LDF: Lint All Specs` | Lint all specs |
-| `LDF: Run Audit` | Run audit on a spec |
+| `LDF: Lint All Specs` | Lint all specs (across all LDF workspaces) |
+| `LDF: Run Audit` | Run audit on a spec (types: spec-review, security, gap-analysis, edge-cases, architecture) |
 | `LDF: Initialize LDF Project` | Set up LDF in workspace |
 
 ### Settings
@@ -47,6 +47,26 @@ Full documentation is available in the extension repository:
 | `ldf.specsDirectory` | `.ldf/specs` | Specs directory |
 | `ldf.guardrailsFile` | `.ldf/guardrails.yaml` | Guardrails config |
 | `ldf.autoRefresh` | `true` | Auto-refresh on file changes |
+
+## Multi-Root Workspace Support
+
+The VS Code extension supports multi-root workspaces where multiple LDF projects are open simultaneously. Each workspace folder with a `.ldf/config.yaml` is treated as an independent LDF project.
+
+### Features
+- Separate spec tree views per workspace
+- Independent guardrail tracking per workspace
+- Workspace-aware commands (lint runs in correct project)
+- **Lint All Specs** command now iterates over all LDF-enabled workspace folders
+
+### Settings
+| Setting | Description |
+|---------|-------------|
+| `ldf.primaryGuardrailWorkspace` | Apply one workspace's guardrails to all |
+
+Use the `LDF: Select Primary Guardrail Workspace` command to set this interactively.
+
+### CLI Behavior
+The LDF CLI operates on the current working directory. When running CLI commands from VS Code's integrated terminal, ensure you're in the correct workspace folder.
 
 ## Repository
 

@@ -301,7 +301,7 @@ class TestStatusCommand:
         with runner.isolated_filesystem(temp_dir=tmp_path):
             runner.invoke(cli, ["init", "--yes"])
 
-            result = runner.invoke(cli, ["status", "--json"])
+            result = runner.invoke(cli, ["status", "--format", "json"])
 
             assert result.exit_code == 0
             # Should contain JSON-like output
@@ -830,30 +830,22 @@ class TestMcpHealthCommand:
         assert "{" in result.output
 
 
-class TestListFrameworkCommand:
-    """Tests for 'ldf list-framework' command."""
+class TestListCommands:
+    """Tests for 'ldf list-*' commands."""
 
-    def test_list_framework_presets(self, runner: CliRunner):
-        """Test list-framework presets subcommand."""
-        result = runner.invoke(cli, ["list-framework", "presets"])
+    def test_list_presets(self, runner: CliRunner):
+        """Test list-presets command."""
+        result = runner.invoke(cli, ["list-presets"])
 
         assert result.exit_code == 0
         assert "core" in result.output.lower() or "saas" in result.output.lower()
 
-    def test_list_framework_packs(self, runner: CliRunner):
-        """Test list-framework packs subcommand."""
-        result = runner.invoke(cli, ["list-framework", "packs"])
+    def test_list_packs(self, runner: CliRunner):
+        """Test list-packs command."""
+        result = runner.invoke(cli, ["list-packs"])
 
         assert result.exit_code == 0
         assert "security" in result.output.lower() or "testing" in result.output.lower()
-
-    def test_list_framework_guardrails(self, runner: CliRunner):
-        """Test list-framework guardrails subcommand."""
-        result = runner.invoke(cli, ["list-framework", "guardrails"])
-
-        assert result.exit_code == 0
-        # Should show guardrail content
-        assert "Testing" in result.output or "guardrail" in result.output.lower()
 
 
 class TestPreflightCommand:
@@ -1096,28 +1088,10 @@ class TestCoverageEnhancements:
             )
         )
 
-        result = runner.invoke(cli, ["coverage", "--diff", "baseline"])
+        result = runner.invoke(cli, ["coverage", "--compare", "baseline"])
 
         assert result.exit_code == 0
         assert "Comparison" in result.output or "baseline" in result.output
-
-
-class TestListFrameworkAllSubcommands:
-    """Additional tests for list-framework subcommands."""
-
-    def test_list_framework_mcp(self, runner: CliRunner):
-        """Test list-framework mcp subcommand."""
-        result = runner.invoke(cli, ["list-framework", "mcp"])
-
-        assert result.exit_code == 0
-        assert "Server" in result.output or "spec" in result.output.lower()
-
-    def test_list_framework_default(self, runner: CliRunner):
-        """Test list-framework without subcommand shows help."""
-        result = runner.invoke(cli, ["list-framework", "--help"])
-
-        assert result.exit_code == 0
-        assert "presets" in result.output or "packs" in result.output
 
 
 class TestAdditionalCLICommands:
@@ -1132,8 +1106,8 @@ class TestAdditionalCLICommands:
 
         assert result.exit_code == 0
 
-    def test_coverage_validate(self, runner: CliRunner, temp_project: Path, monkeypatch):
-        """Test coverage --validate flag."""
+    def test_coverage_fail_under(self, runner: CliRunner, temp_project: Path, monkeypatch):
+        """Test coverage --fail-under flag."""
         import json
 
         monkeypatch.chdir(temp_project)
@@ -1145,12 +1119,12 @@ class TestAdditionalCLICommands:
             )
         )
 
-        result = runner.invoke(cli, ["coverage", "--validate"])
+        result = runner.invoke(cli, ["coverage", "--fail-under", "80"])
 
         assert result.exit_code == 0
 
-    def test_coverage_service_filter(self, runner: CliRunner, temp_project: Path, monkeypatch):
-        """Test coverage --service filter."""
+    def test_coverage_spec_filter(self, runner: CliRunner, temp_project: Path, monkeypatch):
+        """Test coverage --spec filter."""
         import json
 
         monkeypatch.chdir(temp_project)
@@ -1169,7 +1143,7 @@ class TestAdditionalCLICommands:
             )
         )
 
-        result = runner.invoke(cli, ["coverage", "--service", "auth"])
+        result = runner.invoke(cli, ["coverage", "--spec", "auth"])
 
         # Should run without error
         assert result.exit_code in (0, 1)
@@ -1257,7 +1231,7 @@ class TestCliEdgeCases:
         monkeypatch.chdir(temp_project)
 
         with patch("ldf.coverage.compare_coverage", return_value={"status": "ERROR"}):
-            result = runner.invoke(cli, ["coverage", "--diff", "baseline"])
+            result = runner.invoke(cli, ["coverage", "--compare", "baseline"])
 
         assert result.exit_code == 1
 
@@ -1287,14 +1261,14 @@ class TestCliEdgeCases:
 
         assert result.exit_code == 1
 
-    def test_coverage_validate_failure(self, runner: CliRunner, temp_project: Path, monkeypatch):
-        """Test coverage --validate returns error on failure."""
+    def test_coverage_fail_under_failure(self, runner: CliRunner, temp_project: Path, monkeypatch):
+        """Test coverage --fail-under returns error on failure."""
         from unittest.mock import patch
 
         monkeypatch.chdir(temp_project)
 
-        with patch("ldf.coverage.report_coverage", return_value={"status": "FAIL"}):
-            result = runner.invoke(cli, ["coverage", "--validate"])
+        with patch("ldf.coverage.report_coverage", return_value={"status": "FAIL", "coverage_pct": 50.0}):
+            result = runner.invoke(cli, ["coverage", "--fail-under", "80"])
 
         assert result.exit_code == 1
 
@@ -1606,21 +1580,6 @@ files: []
         assert result.exit_code == 0 or "{" in result.output
 
 
-class TestListFrameworkGuardrailsError:
-    """Tests for list-framework guardrails error handling."""
-
-    def test_list_guardrails_shows_core_guardrails(
-        self, runner: CliRunner, temp_project: Path, monkeypatch
-    ):
-        """Test list-framework guardrails shows core guardrails."""
-        monkeypatch.chdir(temp_project)
-
-        result = runner.invoke(cli, ["list-framework", "guardrails"])
-
-        # Should show guardrails table
-        assert "ID" in result.output or "Name" in result.output or result.exit_code == 0
-
-
 class TestUpdateDeclineConfirmation:
     """Tests for update confirmation decline."""
 
@@ -1640,3 +1599,189 @@ class TestUpdateDeclineConfirmation:
             result = runner.invoke(cli, ["update"], input="n\n")
 
         assert "Aborted" in result.output or result.exit_code == 0
+
+
+def _extract_json(output: str) -> dict:
+    """Extract JSON object from output that may contain other text.
+
+    The lint command may output console messages before the JSON.
+    This helper extracts just the JSON portion.
+    """
+    import json
+
+    # Find the first { and last } to extract JSON
+    start = output.find("{")
+    end = output.rfind("}") + 1
+    if start != -1 and end > start:
+        return json.loads(output[start:end])
+    return json.loads(output)
+
+
+class TestLintJsonFormat:
+    """Tests for lint --format json output."""
+
+    def test_lint_json_output_structure(self, runner: CliRunner, temp_spec: Path, monkeypatch):
+        """Test lint JSON output has correct structure."""
+        project_dir = temp_spec.parent.parent.parent
+        monkeypatch.chdir(project_dir)
+
+        result = runner.invoke(cli, ["lint", "--format", "json", "--all"])
+
+        # Parse and validate JSON structure
+        output = _extract_json(result.output)
+        assert "specs_checked" in output
+        assert "total_errors" in output
+        assert "total_warnings" in output
+        assert "passed" in output
+        assert "specs" in output
+        assert isinstance(output["specs"], list)
+
+    def test_lint_json_with_errors(self, runner: CliRunner, temp_spec: Path, monkeypatch):
+        """Test lint JSON output includes error details."""
+        project_dir = temp_spec.parent.parent.parent
+        monkeypatch.chdir(project_dir)
+
+        # Create spec with missing files to trigger errors
+        spec_dir = project_dir / ".ldf" / "specs" / "incomplete-spec"
+        spec_dir.mkdir(parents=True)
+        (spec_dir / "requirements.md").write_text("# Requirements")
+        # Missing design.md and tasks.md
+
+        result = runner.invoke(cli, ["lint", "--format", "json", "incomplete-spec"])
+
+        output = _extract_json(result.output)
+        assert output["specs_checked"] == 1
+        # Should have errors for missing files
+        assert output["total_errors"] > 0
+        assert output["passed"] is False
+
+        # Check spec details
+        spec_result = output["specs"][0]
+        assert spec_result["spec"] == "incomplete-spec"
+        assert len(spec_result["errors"]) > 0
+
+    def test_lint_json_passing_spec(self, runner: CliRunner, temp_spec: Path, monkeypatch):
+        """Test lint JSON output for passing spec."""
+        project_dir = temp_spec.parent.parent.parent
+        monkeypatch.chdir(project_dir)
+
+        result = runner.invoke(cli, ["lint", "--format", "json", temp_spec.name])
+
+        output = _extract_json(result.output)
+        # May have warnings but no errors
+        assert output["total_errors"] == 0
+
+    def test_lint_json_no_ldf_dir(self, runner: CliRunner, tmp_path: Path):
+        """Test lint JSON output when no .ldf directory."""
+        import json
+
+        with runner.isolated_filesystem(temp_dir=tmp_path):
+            result = runner.invoke(cli, ["lint", "--format", "json", "--all"])
+
+        output = json.loads(result.output)
+        assert "error" in output
+        assert ".ldf" in output["error"] or "init" in output["error"].lower()
+
+
+class TestLintTextFormat:
+    """Tests for lint --format text output."""
+
+    def test_lint_text_output(self, runner: CliRunner, temp_spec: Path, monkeypatch):
+        """Test lint with text format."""
+        project_dir = temp_spec.parent.parent.parent
+        monkeypatch.chdir(project_dir)
+
+        result = runner.invoke(cli, ["lint", "--format", "text", "--all"])
+
+        # Text format should have readable output
+        assert "=" in result.output  # Separator lines
+        assert "PASSED" in result.output or "error" in result.output.lower()
+
+
+class TestTemplateListCommand:
+    """Tests for ldf template list command."""
+
+    def test_template_list_json_format(self, runner: CliRunner, temp_project: Path, monkeypatch):
+        """Test template list with JSON format."""
+        import json
+
+        monkeypatch.chdir(temp_project)
+
+        result = runner.invoke(cli, ["template", "list", "--format", "json"])
+
+        assert result.exit_code == 0
+        output = json.loads(result.output)
+        assert "templates" in output
+        assert "total" in output
+        assert isinstance(output["templates"], list)
+        assert output["total"] == len(output["templates"])
+
+    def test_template_list_text_format(self, runner: CliRunner, temp_project: Path, monkeypatch):
+        """Test template list with text format."""
+        monkeypatch.chdir(temp_project)
+
+        result = runner.invoke(cli, ["template", "list", "--format", "text"])
+
+        assert result.exit_code == 0
+        # Either shows templates or "No templates found"
+        assert "template" in result.output.lower()
+
+    def test_template_list_rich_format(self, runner: CliRunner, temp_project: Path, monkeypatch):
+        """Test template list with rich format (default)."""
+        monkeypatch.chdir(temp_project)
+
+        result = runner.invoke(cli, ["template", "list"])
+
+        assert result.exit_code == 0
+        # Either shows table or "No templates found"
+        assert "template" in result.output.lower()
+
+    def test_template_list_with_team_template(
+        self, runner: CliRunner, temp_project: Path, monkeypatch
+    ):
+        """Test template list shows team templates."""
+        import json
+
+        monkeypatch.chdir(temp_project)
+
+        # Create a team template
+        team_templates = temp_project / ".ldf" / "team-templates" / "my-template"
+        team_templates.mkdir(parents=True)
+        (team_templates / "template.yaml").write_text("""
+name: my-team-template
+version: 1.0.0
+ldf_version: 1.0.0
+description: A team template for testing
+components:
+  - config
+  - guardrails
+""")
+
+        result = runner.invoke(cli, ["template", "list", "--format", "json"])
+
+        assert result.exit_code == 0
+        output = json.loads(result.output)
+
+        # Should find the team template
+        assert output["total"] >= 1
+        team_templates_found = [t for t in output["templates"] if t["type"] == "team"]
+        assert len(team_templates_found) >= 1
+        assert any(t["name"] == "my-team-template" for t in team_templates_found)
+
+
+class TestPreflightJsonOutput:
+    """Tests for preflight --json output."""
+
+    def test_preflight_json_output(self, runner: CliRunner, temp_project: Path, monkeypatch):
+        """Test preflight with JSON output."""
+        monkeypatch.chdir(temp_project)
+
+        result = runner.invoke(cli, ["preflight", "--json", "--skip-coverage"])
+
+        # Preflight may also include some console output before JSON
+        output = _extract_json(result.output)
+        assert "passed" in output
+        assert "exit_code" in output
+        assert "checks" in output
+        assert "config" in output["checks"]
+        assert "lint" in output["checks"]
