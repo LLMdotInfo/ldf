@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "llm-ldf"
 dynamic = ["readme"]
-version = "1.1.1"
+version = "1.1.0"
 description = "LLM Development Framework - Spec-driven development for AI-assisted engineering"
 license = {text = "MIT"}
 authors = [
