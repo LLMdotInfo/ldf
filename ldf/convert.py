@@ -11,7 +11,7 @@ from pathlib import Path
 import yaml
 
 from ldf.utils.console import console
-from ldf.utils.spec_utils import sanitize_spec_name
+from ldf.utils.security import SecurityError, validate_spec_name
 
 
 @dataclass
@@ -454,17 +454,19 @@ def import_backwards_fill(
     Returns:
         ImportResult with details of what was created.
     """
-    # Sanitize spec name to prevent path traversal
+    # Validate spec name using comprehensive security validator
+    project_root = Path(project_root).resolve()
+    ldf_dir = project_root / ".ldf"
+    specs_dir = ldf_dir / "specs"
+
     try:
-        spec_name = sanitize_spec_name(spec_name)
-    except ValueError as e:
+        validate_spec_name(spec_name, specs_dir)
+    except SecurityError as e:
         result = ImportResult(success=False, spec_name=spec_name)
         result.errors.append(str(e))
         return result
 
     result = ImportResult(success=True, spec_name=spec_name)
-    project_root = Path(project_root).resolve()
-    ldf_dir = project_root / ".ldf"
 
     # Parse sections using markers
     answerpack_pattern = r"# === ANSWERPACK: (\S+) ===\n(.*?)(?=# ===|$)"

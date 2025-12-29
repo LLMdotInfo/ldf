@@ -55,10 +55,9 @@ def workspace():
     help="Overwrite existing workspace manifest",
 )
 @click.option(
-    "--create-shared",
-    is_flag=True,
+    "--create-shared/--no-create-shared",
     default=True,
-    help="Create .ldf-shared/ directory structure (default: true)",
+    help="Create .ldf-shared/ directory structure",
 )
 def init(name: str | None, discover: bool, force: bool, create_shared: bool):
     """Initialize a new workspace.
@@ -323,16 +322,14 @@ def add(project_path: str, alias: str | None):
 
 @workspace.command()
 @click.option(
-    "--rebuild-registry",
-    is_flag=True,
+    "--rebuild-registry/--no-rebuild-registry",
     default=True,
-    help="Rebuild project registry cache (default: true)",
+    help="Rebuild project registry cache",
 )
 @click.option(
-    "--validate-refs",
-    is_flag=True,
+    "--validate-refs/--no-validate-refs",
     default=True,
-    help="Validate cross-project references (default: true)",
+    help="Validate cross-project references",
 )
 def sync(rebuild_registry: bool, validate_refs: bool):
     """Synchronize workspace state.
