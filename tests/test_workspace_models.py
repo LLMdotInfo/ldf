@@ -1,9 +1,6 @@
 """Tests for ldf.models.workspace module."""
 
 from datetime import datetime
-from pathlib import Path
-
-import pytest
 
 from ldf.models.workspace import (
     DiscoveryConfig,

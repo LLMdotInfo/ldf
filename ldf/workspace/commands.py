@@ -637,7 +637,9 @@ def _print_rich_report(report_data: dict) -> None:
     # Summary
     summary = report_data["summary"]
     console.print("[bold]Summary[/bold]")
-    console.print(f"  Projects: {summary['total_projects']} ({summary['projects_with_ldf']} with LDF)")
+    total = summary['total_projects']
+    with_ldf = summary['projects_with_ldf']
+    console.print(f"  Projects: {total} ({with_ldf} with LDF)")
     console.print(f"  Total Specs: {summary['total_specs']}")
     if summary["average_coverage"]:
         console.print(f"  Average Coverage: {summary['average_coverage']:.1f}%")
@@ -698,7 +700,10 @@ def _generate_html_report(report_data: dict) -> str:
 <head>
     <title>{report_data['workspace']} - Workspace Report</title>
     <style>
-        body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 40px; }}
+        body {{
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 40px;
+        }}
         h1 {{ color: #333; }}
         .summary {{ display: flex; gap: 20px; margin: 20px 0; }}
         .card {{ background: #f5f5f5; padding: 20px; border-radius: 8px; text-align: center; }}
@@ -798,7 +803,12 @@ def _generate_dot_graph(graph_data: dict[str, set[str]], workspace_root: Path) -
     default="rich",
     help="Output format",
 )
-def validate_refs(format: str):
+@click.option(
+    "-v", "--verbose",
+    is_flag=True,
+    help="Show detailed reference information",
+)
+def validate_refs(format: str, verbose: bool):
     """Validate all cross-project references.
 
     Checks that all @project:spec references in the workspace
@@ -808,6 +818,7 @@ def validate_refs(format: str):
     Examples:
       ldf workspace validate-refs              # Rich output
       ldf workspace validate-refs --format json  # JSON for scripting
+      ldf workspace validate-refs --verbose    # Show deduplication info
     """
     from ldf.lint import lint_workspace_references
 
@@ -817,7 +828,7 @@ def validate_refs(format: str):
         console.print("Run [cyan]ldf workspace init[/cyan] to create one.")
         raise SystemExit(1)
 
-    exit_code = lint_workspace_references(workspace_root, format)
+    exit_code = lint_workspace_references(workspace_root, format, verbose=verbose)
     raise SystemExit(exit_code)
 
 

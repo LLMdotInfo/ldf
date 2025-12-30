@@ -92,6 +92,7 @@ def run_audit(
     output_format: str = "text",
     dry_run: bool = False,
     pattern: str | None = None,
+    project_root: Path | None = None,
 ) -> None:
     """Run audit request generation or import feedback.
 
@@ -108,9 +109,12 @@ def run_audit(
         output_format: Output format ("text" or "json")
         dry_run: Whether to preview without writing files
         pattern: Optional glob pattern to filter specs
+        project_root: Project root directory (defaults to cwd)
     """
+    if project_root is None:
+        project_root = Path.cwd()
     if import_file:
-        _import_feedback(Path(import_file))
+        _import_feedback(Path(import_file), project_root=project_root)
     elif audit_type:
         if use_api and agent:
             _run_api_audit(
@@ -121,6 +125,7 @@ def run_audit(
                 skip_confirm,
                 spec_name,
                 output_format,
+                project_root=project_root,
             )
         elif use_api:
             if output_format == "json":
@@ -133,7 +138,8 @@ def run_audit(
                 console.print("  ldf audit --type spec-review --api --agent chatgpt")
         else:
             _generate_audit_request(
-                audit_type, include_secrets, skip_confirm, spec_name, dry_run, pattern
+                audit_type, include_secrets, skip_confirm, spec_name, dry_run, pattern,
+                project_root=project_root,
             )
     else:
         if output_format == "json":
@@ -157,6 +163,7 @@ def _run_api_audit(
     skip_confirm: bool,
     spec_name: str | None,
     output_format: str = "text",
+    project_root: Path | None = None,
 ) -> None:
     """Run an API-based audit using ChatGPT or Gemini.
 
@@ -168,7 +175,10 @@ def _run_api_audit(
         skip_confirm: Whether to skip confirmation prompts
         spec_name: Optional specific spec to audit
         output_format: Output format ("text" or "json")
+        project_root: Project root directory (defaults to cwd)
     """
+    if project_root is None:
+        project_root = Path.cwd()
     import asyncio
     import json
 
@@ -218,7 +228,7 @@ audit_api:
 
     for atype in audit_types:
         # Generate the prompt content (without writing to file)
-        prompt = _build_audit_prompt_for_api(atype, include_secrets, spec_name)
+        prompt = _build_audit_prompt_for_api(atype, include_secrets, spec_name, project_root)
         if prompt is None:
             return
 
@@ -295,6 +305,7 @@ def _build_audit_prompt_for_api(
     audit_type: str,
     include_secrets: bool,
     spec_name: str | None,
+    project_root: Path | None = None,
 ) -> str | None:
     """Build audit prompt for API calls (without writing to file).
 
@@ -302,11 +313,14 @@ def _build_audit_prompt_for_api(
         audit_type: Type of audit
         include_secrets: Whether to include sensitive content
         spec_name: Optional specific spec
+        project_root: Project root directory (defaults to cwd)
 
     Returns:
         Prompt content or None if failed
     """
-    specs_dir = Path.cwd() / ".ldf" / "specs"
+    if project_root is None:
+        project_root = Path.cwd()
+    specs_dir = project_root / ".ldf" / "specs"
     if not specs_dir.exists():
         console.print("[red]Error: .ldf/specs/ not found. Run 'ldf init' first.[/red]")
         return None
@@ -343,6 +357,7 @@ def _generate_audit_request(
     spec_name: str | None = None,
     dry_run: bool = False,
     pattern: str | None = None,
+    project_root: Path | None = None,
 ) -> str | None:
     """Generate an audit request for external AI agents.
 
@@ -353,15 +368,18 @@ def _generate_audit_request(
         spec_name: Optional specific spec to audit
         dry_run: Whether to preview without writing files
         pattern: Optional glob pattern to filter specs
+        project_root: Project root directory (defaults to cwd)
 
     Returns:
         The generated audit request content, or None if aborted/failed
     """
     import fnmatch
+    if project_root is None:
+        project_root = Path.cwd()
     console.print(f"\n[bold blue]Generating {audit_type} audit request...[/bold blue]\n")
 
     # Find specs to include
-    specs_dir = Path.cwd() / ".ldf" / "specs"
+    specs_dir = project_root / ".ldf" / "specs"
     if not specs_dir.exists():
         console.print("[red]Error: .ldf/specs/ not found. Run 'ldf init' first.[/red]")
         return None
@@ -415,7 +433,7 @@ def _generate_audit_request(
         return None
 
     # Generate audit request markdown
-    output_path = Path.cwd() / f"audit-request-{audit_type}.md"
+    output_path = project_root / f"audit-request-{audit_type}.md"
     content = _build_audit_request(audit_type, specs, include_secrets)
 
     # Dry run mode - show preview
@@ -602,8 +620,15 @@ Please provide your feedback in the following format:
     return content
 
 
-def _import_feedback(feedback_path: Path) -> None:
-    """Import audit feedback from external AI agents."""
+def _import_feedback(feedback_path: Path, project_root: Path | None = None) -> None:
+    """Import audit feedback from external AI agents.
+
+    Args:
+        feedback_path: Path to the feedback file
+        project_root: Project root directory (defaults to cwd)
+    """
+    if project_root is None:
+        project_root = Path.cwd()
     if not feedback_path.exists():
         console.print(f"[red]Error: File not found: {feedback_path}[/red]")
         return
@@ -615,7 +640,7 @@ def _import_feedback(feedback_path: Path) -> None:
     console.print(Markdown(content))
 
     # Save to .ldf/audit-history/
-    audit_dir = Path.cwd() / ".ldf" / "audit-history"
+    audit_dir = project_root / ".ldf" / "audit-history"
     audit_dir.mkdir(exist_ok=True)
 
     from datetime import datetime

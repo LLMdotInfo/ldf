@@ -96,10 +96,16 @@ class GuardrailTracker:
                 "message": "No guardrail coverage matrix found in requirements.md",
             }
 
-        # Count statuses
-        addressed = len([row for row in matrix if row["status"].upper() not in ["N/A", "TODO"]])
-        not_applicable = len([row for row in matrix if row["status"].upper() == "N/A"])
-        todo = len([row for row in matrix if row["status"].upper() == "TODO"])
+        # Count statuses (N/A may include justification like "N/A - not applicable for MVP")
+        def is_na(status: str) -> bool:
+            return status.upper().startswith("N/A")
+
+        def is_todo(status: str) -> bool:
+            return status.upper() == "TODO"
+
+        addressed = len([row for row in matrix if not is_na(row["status"]) and not is_todo(row["status"])])
+        not_applicable = len([row for row in matrix if is_na(row["status"])])
+        todo = len([row for row in matrix if is_todo(row["status"])])
 
         compliance_rate = addressed / expected_count if expected_count > 0 else 0.0
 

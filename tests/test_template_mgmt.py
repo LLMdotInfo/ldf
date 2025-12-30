@@ -2,7 +2,6 @@
 
 import os
 import zipfile
-from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -203,7 +202,7 @@ project:
         (ldf_dir / "config.yaml").write_text("api_key: sk-12345678901234567890")
 
         # Dry run should show warning
-        result = export_template(tmp_path, dry_run=True)
+        export_template(tmp_path, dry_run=True)
 
         # Should still succeed in dry-run
         captured = capsys.readouterr()

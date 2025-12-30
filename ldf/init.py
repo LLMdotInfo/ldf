@@ -725,7 +725,9 @@ def repair_project(project_root: Path) -> None:
 
     # Extract settings from config or use defaults
     # Handle v1.1 schema: ldf.preset or guardrails.preset
-    preset = config.get("ldf", {}).get("preset") or config.get("guardrails", {}).get("preset", "custom")
+    ldf_preset = config.get("ldf", {}).get("preset")
+    guardrails_preset = config.get("guardrails", {}).get("preset", "custom")
+    preset = ldf_preset or guardrails_preset
 
     # Handle v1.1 schema: question_packs.core + question_packs.optional
     qp_config = config.get("question_packs", list(get_core_packs()))

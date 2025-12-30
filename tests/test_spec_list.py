@@ -1,7 +1,6 @@
 """Tests for ldf.spec_list module."""
 
 import json
-from pathlib import Path
 
 import pytest
 
@@ -220,7 +219,7 @@ class TestGetLastModified:
         # Create design later
         (spec_dir / "design.md").write_text("# Second")
 
-        result = _get_last_modified(spec_dir)
+        _get_last_modified(spec_dir)  # Call to verify no errors
 
         # Result should reflect design.md's mtime (the newer file)
         design_mtime = (spec_dir / "design.md").stat().st_mtime

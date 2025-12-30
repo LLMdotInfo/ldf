@@ -2,7 +2,7 @@
 
 import json
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 import yaml
@@ -462,8 +462,8 @@ class TestCreateSharedStructure:
         """Test creating shared directory structure."""
         shared_dir = tmp_path / ".ldf-shared"
 
-        # Capture console output by patching
-        with patch("ldf.workspace.commands.console") as mock_console:
+        # Suppress console output during test
+        with patch("ldf.workspace.commands.console"):
             _create_shared_structure(shared_dir)
 
         assert shared_dir.is_dir()

@@ -87,20 +87,31 @@ class ResolvedReference:
     error: str | None = None
 
 
-def parse_references(content: str) -> list[SpecReference]:
+def parse_references(content: str, deduplicate: bool = True) -> list[SpecReference]:
     """Parse all cross-project references from content.
 
     Args:
         content: Markdown content to parse
+        deduplicate: Whether to deduplicate references (default True).
+                    When True, each unique reference (project:spec#section)
+                    is returned only once, with the first line number found.
 
     Returns:
         List of parsed SpecReference objects
     """
     references = []
+    seen: set[tuple[str, str, str | None]] = set()  # Track seen references for deduplication
 
     for line_num, line in enumerate(content.split("\n"), start=1):
         # Find all references in this line
         for match in REFERENCE_PATTERN.finditer(line):
+            # Create a unique key for this reference
+            key = (match.group("project"), match.group("spec"), match.group("section"))
+
+            if deduplicate and key in seen:
+                continue  # Skip duplicate references
+            seen.add(key)
+
             ref = SpecReference(
                 project=match.group("project"),
                 spec=match.group("spec"),
@@ -112,6 +123,13 @@ def parse_references(content: str) -> list[SpecReference]:
 
         # Also check for shared resource references
         for match in SHARED_REFERENCE_PATTERN.finditer(line):
+            # Create a unique key for shared reference
+            key = ("shared", match.group("resource"), None)
+
+            if deduplicate and key in seen:
+                continue  # Skip duplicate references
+            seen.add(key)
+
             ref = SpecReference(
                 project="shared",
                 spec=match.group("resource"),
@@ -124,11 +142,14 @@ def parse_references(content: str) -> list[SpecReference]:
     return references
 
 
-def parse_references_from_file(file_path: Path) -> list[SpecReference]:
+def parse_references_from_file(
+    file_path: Path, deduplicate: bool = True
+) -> list[SpecReference]:
     """Parse all cross-project references from a file.
 
     Args:
         file_path: Path to the file to parse
+        deduplicate: Whether to deduplicate references (default True)
 
     Returns:
         List of parsed SpecReference objects
@@ -138,7 +159,7 @@ def parse_references_from_file(file_path: Path) -> list[SpecReference]:
 
     try:
         content = file_path.read_text()
-        return parse_references(content)
+        return parse_references(content, deduplicate=deduplicate)
     except Exception as e:
         logger.warning(f"Failed to parse references from {file_path}: {e}")
         return []
@@ -216,11 +237,22 @@ def resolve_reference(
             error=f"Spec '{reference.spec}' not found in project '{reference.project}'",
         )
 
-    # If section specified, check for section in requirements.md
+    # If section specified, check for section header in spec.md
     if reference.section:
-        # We just verify the spec exists; section validation would require parsing
-        # the markdown which is more complex
-        pass
+        spec_md = spec_path / "spec.md"
+        if spec_md.exists():
+            content = spec_md.read_text()
+            # Match section header (case-insensitive, any heading level)
+            section_pattern = rf"^#+\s*{re.escape(reference.section)}\s*$"
+            if not re.search(section_pattern, content, re.MULTILINE | re.IGNORECASE):
+                return ResolvedReference(
+                    reference=reference,
+                    exists=False,
+                    error=(
+                        f"Section '{reference.section}' not found in "
+                        f"'{reference.project}:{reference.spec}'"
+                    ),
+                )
 
     return ResolvedReference(
         reference=reference,

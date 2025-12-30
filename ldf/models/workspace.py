@@ -183,24 +183,44 @@ class WorkspaceManifest:
             reporting=ReportingConfig.from_dict(data.get("reporting")),
         )
 
-    def get_all_project_entries(self, workspace_root: Path | None = None) -> list[ProjectEntry]:
+    def get_all_project_entries(
+        self, workspace_root: Path | None = None, warn_collisions: bool = True
+    ) -> list[ProjectEntry]:
         """Get all project entries (explicit and discovered).
 
         Args:
             workspace_root: If provided, also discover projects using glob patterns.
                            If None, only returns explicitly defined projects.
+            warn_collisions: If True, log warnings for alias collisions (default: True).
 
         Returns:
             List of all project entries (explicit + discovered, deduplicated by path).
+            Note: When alias collisions occur, earlier entries take precedence.
         """
+        import warnings
+
         entries = list(self.projects.explicit)
+        alias_to_path: dict[str, str] = {e.alias: e.path for e in entries}
 
         if workspace_root and self.projects.discovery.patterns:
             discovered = self._discover_projects(workspace_root)
             explicit_paths = {e.path for e in entries}
             for entry in discovered:
                 if entry.path not in explicit_paths:
+                    # Check for alias collision
+                    if entry.alias in alias_to_path:
+                        if warn_collisions:
+                            warnings.warn(
+                                f"Alias collision: '{entry.alias}' used by both "
+                                f"'{alias_to_path[entry.alias]}' and '{entry.path}'. "
+                                f"Using '{alias_to_path[entry.alias]}'. "
+                                f"Add explicit alias in ldf-workspace.yaml to resolve.",
+                                UserWarning,
+                                stacklevel=2,
+                            )
+                        continue  # Skip the duplicate alias
                     entries.append(entry)
+                    alias_to_path[entry.alias] = entry.path
 
         return entries
 

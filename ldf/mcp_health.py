@@ -101,24 +101,27 @@ def check_spec_inspector(project_root: Path) -> ServerHealth:
         if item.is_dir() and (item / "requirements.md").exists():
             spec_count += 1
 
-    # Check guardrails
+    # Check guardrails - dynamically count active guardrails
     guardrail_count = 0
     try:
+        from ldf.utils.guardrail_loader import get_active_guardrails
+
+        active_guardrails = get_active_guardrails(project_root)
+        guardrail_count = len([g for g in active_guardrails if g.enabled])
+    except Exception:
+        # Fall back to checking if guardrails.yaml exists
         if guardrails_path.exists():
-            with open(guardrails_path) as f:
-                guardrails = yaml.safe_load(f) or {}
-            # Count base guardrails (8 core)
-            guardrail_count = 8  # Core guardrails
-            # Add preset-specific if configured
-            preset = guardrails.get("preset", "custom")
-            preset_counts = {"saas": 5, "fintech": 7, "healthcare": 6, "api-only": 4}
-            guardrail_count += preset_counts.get(preset, 0)
-    except yaml.YAMLError:
-        return ServerHealth(
-            name="spec_inspector",
-            status=HealthStatus.ERROR,
-            message="guardrails.yaml invalid",
-        )
+            try:
+                with open(guardrails_path) as f:
+                    yaml.safe_load(f)
+                # If we can parse it but can't load guardrails, assume some exist
+                guardrail_count = 8  # Default fallback
+            except yaml.YAMLError:
+                return ServerHealth(
+                    name="spec_inspector",
+                    status=HealthStatus.ERROR,
+                    message="guardrails.yaml invalid",
+                )
 
     return ServerHealth(
         name="spec_inspector",

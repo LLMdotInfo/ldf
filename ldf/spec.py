@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from ldf.utils.config import get_answerpacks_dir, get_specs_dir, get_templates_dir
+from ldf.utils.config import get_answerpacks_dir, get_specs_dir
 from ldf.utils.console import console
 from ldf.utils.guardrail_loader import detect_shared_resources_path
 from ldf.utils.logging import get_logger
@@ -12,7 +12,6 @@ from ldf.utils.security import (
     validate_spec_name,
     validate_spec_path_safe,
 )
-from ldf.utils.spec_utils import sanitize_spec_name
 
 logger = get_logger(__name__)
 
@@ -141,7 +140,9 @@ def create_spec(name: str, project_root: Path | None = None) -> bool:
             if ".ldf-shared" in str(template_path):
                 console.print(f"[green]✓[/green] Created {template_name} [dim](from shared)[/dim]")
             elif "/_framework/" in str(template_path):
-                console.print(f"[green]✓[/green] Created {template_name} [dim](from framework)[/dim]")
+                console.print(
+                    f"[green]✓[/green] Created {template_name} [dim](from framework)[/dim]"
+                )
             else:
                 console.print(f"[green]✓[/green] Created {template_name}")
         else:

@@ -350,7 +350,9 @@ def check_ldf_completeness(ldf_dir: Path) -> tuple[list[str], list[str]]:
         has_packs = any(qp_dir.glob("*.yaml"))  # Legacy flat structure
         if not has_packs:
             # Check new core/optional subdirectories
-            has_packs = any((qp_dir / "core").glob("*.yaml")) or any((qp_dir / "optional").glob("*.yaml"))
+            core_packs = any((qp_dir / "core").glob("*.yaml"))
+            optional_packs = any((qp_dir / "optional").glob("*.yaml"))
+            has_packs = core_packs or optional_packs
         if not has_packs:
             missing.append("question-packs/*.yaml (no packs found)")
 

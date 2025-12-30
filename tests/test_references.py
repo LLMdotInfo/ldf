@@ -1,9 +1,6 @@
 """Tests for ldf.utils.references module."""
 
-from pathlib import Path
-
 import pytest
-import yaml
 
 from ldf.utils.references import (
     REFERENCE_PATTERN,
@@ -256,6 +253,63 @@ class TestResolveReference:
 
         assert result.exists is False
         assert "not found" in result.error
+
+    def test_resolve_reference_with_valid_section(self, workspace_with_projects):
+        """Test resolving reference with a valid section."""
+        workspace_root, manifest, shared = workspace_with_projects
+
+        # Add spec.md with section headers to auth project
+        spec_path = workspace_root / "services" / "auth" / ".ldf" / "specs" / "user-session"
+        (spec_path / "spec.md").write_text(
+            "# User Session\n\n## API Design\n\nSome API details.\n\n## Data Model\n\nModels."
+        )
+
+        ref = SpecReference(project="auth", spec="user-session", section="API Design")
+        result = resolve_reference(ref, workspace_root, manifest)
+
+        assert result.exists is True
+        assert result.error is None
+
+    def test_resolve_reference_with_invalid_section(self, workspace_with_projects):
+        """Test resolving reference with a non-existent section."""
+        workspace_root, manifest, shared = workspace_with_projects
+
+        # Add spec.md to auth project
+        spec_path = workspace_root / "services" / "auth" / ".ldf" / "specs" / "user-session"
+        (spec_path / "spec.md").write_text("# User Session\n\n## Overview\n\nBasic info.")
+
+        ref = SpecReference(project="auth", spec="user-session", section="API Design")
+        result = resolve_reference(ref, workspace_root, manifest)
+
+        assert result.exists is False
+        assert "Section 'API Design' not found" in result.error
+        assert "auth:user-session" in result.error
+
+    def test_resolve_reference_section_case_insensitive(self, workspace_with_projects):
+        """Test that section matching is case-insensitive."""
+        workspace_root, manifest, shared = workspace_with_projects
+
+        spec_path = workspace_root / "services" / "auth" / ".ldf" / "specs" / "user-session"
+        (spec_path / "spec.md").write_text("# User Session\n\n## API Design\n\nDetails.")
+
+        # Reference with different case
+        ref = SpecReference(project="auth", spec="user-session", section="api design")
+        result = resolve_reference(ref, workspace_root, manifest)
+
+        assert result.exists is True
+        assert result.error is None
+
+    def test_resolve_reference_section_without_spec_md(self, workspace_with_projects):
+        """Test section reference when spec.md doesn't exist."""
+        workspace_root, manifest, shared = workspace_with_projects
+
+        # user-session spec exists (from fixture) but has no spec.md
+        ref = SpecReference(project="auth", spec="user-session", section="Overview")
+        result = resolve_reference(ref, workspace_root, manifest)
+
+        # Should still succeed (spec exists, we just can't validate the section)
+        assert result.exists is True
+        assert result.error is None
 
 
 class TestValidateReferencesInSpec:

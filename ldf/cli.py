@@ -74,7 +74,6 @@ def get_project_context(ctx: click.Context) -> "ProjectContext":
         click.ClickException: If project cannot be resolved
     """
     from ldf.project_resolver import (
-        ProjectContext,
         ProjectNotFoundError,
         ProjectResolver,
         WorkspaceNotFoundError,
@@ -328,7 +327,9 @@ def init(
     is_flag=True,
     help="Show detailed per-file lint output with error messages",
 )
+@click.pass_context
 def lint(
+    ctx: click.Context,
     spec_name: str | None,
     lint_all: bool,
     fix: bool,
@@ -348,6 +349,26 @@ def lint(
     """
     from ldf.lint import lint_specs
 
+    # Try to get project context
+    # If --project was explicitly provided, fail-fast on resolution errors
+    # Otherwise, fall back to cwd for backwards compatibility
+    try:
+        project_context = get_project_context(ctx)
+        project_root = project_context.project_root
+    except click.ClickException as e:
+        # Only fall back to cwd if no explicit target was provided
+        if ctx.obj.get("project_alias") or ctx.obj.get("workspace_path"):
+            # User explicitly specified --project or --workspace but it failed - fail fast
+            raise
+        # No explicit target, fall back to cwd (backwards compatible)
+        project_root = Path.cwd()
+        # Only show warning for human-readable formats (don't break JSON/SARIF/text output)
+        if output_format == "rich":
+            console.print(
+                f"[yellow]Warning:[/yellow] {e.message}. Using current directory.",
+                style="dim",
+            )
+
     exit_code = lint_specs(
         spec_name,
         lint_all,
@@ -355,13 +376,15 @@ def lint(
         output_format=output_format,
         output_file=output_file,
         verbose=verbose,
+        project_root=project_root,
     )
     raise SystemExit(exit_code)
 
 
 @main.command("create-spec")
 @click.argument("name")
-def create_spec(name: str):
+@with_project_context
+def create_spec(name: str, project_context: "ProjectContext"):
     """Create a new feature specification from templates.
 
     Creates the spec directory structure with template files:
@@ -378,7 +401,7 @@ def create_spec(name: str):
     """
     from ldf.spec import create_spec as do_create_spec
 
-    success = do_create_spec(name)
+    success = do_create_spec(name, project_root=project_context.project_root)
     if not success:
         raise SystemExit(1)
 
@@ -452,9 +475,10 @@ def create_spec(name: str):
 )
 @click.option(
     "--pattern",
-    "-p",
+    "-P",
     help="Filter specs by glob pattern (e.g., 'auth*', '*-api')",
 )
+@with_project_context
 def audit(
     audit_type: str | None,
     spec_name: str | None,
@@ -467,6 +491,7 @@ def audit(
     output: str,
     dry_run: bool,
     pattern: str | None,
+    project_context: "ProjectContext",
 ):
     """Generate audit requests or import feedback from other AI agents.
 
@@ -537,6 +562,7 @@ def audit(
         output_format=output,
         dry_run=dry_run,
         pattern=pattern,
+        project_root=project_context.project_root,
     )
 
 
@@ -630,6 +656,7 @@ def mcp_config(root: Path | None, server: tuple, output_format: str):
     default="rich",
     help="Output format: rich (default), json, or text",
 )
+@with_project_context
 def coverage(
     spec: str | None,
     guardrail: int | None,
@@ -639,6 +666,7 @@ def coverage(
     compare_target: str | None,
     upload_dest: str | None,
     format: str,
+    project_context: "ProjectContext",
 ):
     """Check test coverage against guardrail requirements.
 
@@ -663,7 +691,9 @@ def coverage(
 
     # Handle compare mode
     if compare_target:
-        result = compare_coverage(compare_target, service=spec)
+        result = compare_coverage(
+            compare_target, service=spec, project_root=project_context.project_root
+        )
         if result.get("status") == "ERROR":
             raise SystemExit(1)
         return
@@ -672,6 +702,7 @@ def coverage(
     report = report_coverage(
         service=spec,
         guardrail_id=guardrail,
+        project_root=project_context.project_root,
         validate=(fail_under is not None),
         verbose=verbose,
     )
@@ -713,7 +744,8 @@ def coverage(
     is_flag=True,
     help="Show detailed project information and recommendations",
 )
-def status(format: str, verbose: bool):
+@click.pass_context
+def status(ctx: click.Context, format: str, verbose: bool):
     """Show LDF project status and recommendations.
 
     Detects the current project state and provides actionable recommendations.
@@ -735,7 +767,27 @@ def status(format: str, verbose: bool):
     """
     from ldf.detection import ProjectState, detect_project_state, get_specs_summary
 
-    result = detect_project_state(Path.cwd())
+    # Try to get project context
+    # If --project was explicitly provided, fail-fast on resolution errors
+    # Otherwise, fall back to cwd for backwards compatibility (status should work anywhere)
+    try:
+        project_context = get_project_context(ctx)
+        project_root = project_context.project_root
+    except click.ClickException as e:
+        # Only fall back to cwd if no explicit target was provided
+        if ctx.obj.get("project_alias") or ctx.obj.get("workspace_path"):
+            # User explicitly specified --project or --workspace but it failed - fail fast
+            raise
+        # No explicit target, fall back to cwd (backwards compatible)
+        project_root = Path.cwd()
+        # Only show warning for human-readable format (don't break JSON/text output)
+        if format == "rich":
+            console.print(
+                f"[yellow]Warning:[/yellow] {e.message}. Using current directory.",
+                style="dim",
+            )
+
+    result = detect_project_state(project_root)
 
     if format == "json":
         # Add specs to JSON output
@@ -842,7 +894,8 @@ def status(format: str, verbose: bool):
                 status_icon = status_icons.get(str(spec["status"]), str(spec["status"]))
                 console.print(f"  - {spec['name']} ({status_icon})")
             if not verbose and len(specs) > 5:
-                console.print(f"  [dim]... and {len(specs) - 5} more (use --verbose to see all)[/dim]")
+                remaining = len(specs) - 5
+                console.print(f"  [dim]... and {remaining} more (use --verbose to see all)[/dim]")
 
         console.print()
 
@@ -963,7 +1016,15 @@ def hooks_status():
     is_flag=True,
     help="Skip confirmation prompts",
 )
-def update(check: bool, dry_run: bool, only: tuple, templates: bool, macros: bool, question_packs: bool, yes: bool):
+def update(
+    check: bool,
+    dry_run: bool,
+    only: tuple,
+    templates: bool,
+    macros: bool,
+    question_packs: bool,
+    yes: bool,
+):
     """Update framework files from LDF source.
 
     Pulls latest templates, macros, and question-packs while preserving
@@ -1914,7 +1975,6 @@ def add_pack(pack_name: str | None, list_packs: bool, add_all: bool, force: bool
     qp_config = config.get("question_packs", {})
     existing_core = set(qp_config.get("core", []))
     existing_optional = set(qp_config.get("optional", []))
-    existing_packs = existing_core | existing_optional
 
     checksums = config.get("_checksums", {})
 
@@ -2109,7 +2169,8 @@ def list_packs_cmd(core: bool, optional: bool, installed: bool, format: str):
         fs_packs.update(f.stem for f in optional_dir.glob("*.yaml"))
 
     # Categorize packs
-    all_core = sorted(set(core_packs) | (fs_packs & {p for p in fs_packs if p in ["security", "testing", "api-design", "data-model"]}))
+    core_categories = {"security", "testing", "api-design", "data-model"}
+    all_core = sorted(set(core_packs) | (fs_packs & core_categories))
     all_optional = sorted(set(optional_packs) | (fs_packs - set(all_core)))
 
     # Check installation status
@@ -2224,8 +2285,6 @@ def tasks_cmd(spec_name: str | None, status: str, format: str):
     """
     import re
 
-    from rich.table import Table
-
     from ldf.utils.spec_parser import extract_tasks
 
     project_root = Path.cwd()
@@ -2255,17 +2314,27 @@ def tasks_cmd(spec_name: str | None, status: str, format: str):
         content = tasks_file.read_text()
         tasks = extract_tasks(content)
 
-        # Extract phase headers for grouping
-        phase_pattern = re.compile(r"^##\s*(Phase\s+\d+[^#\n]*)", re.MULTILINE)
-        phases = phase_pattern.findall(content)
+        # Extract phase headers for grouping: maps phase number to full title
+        phase_pattern = re.compile(r"^##\s*(Phase\s+(\d+)[^#\n]*)", re.MULTILINE)
+        phase_map: dict[int, str] = {}
+        for match in phase_pattern.finditer(content):
+            full_title = match.group(1).strip()
+            phase_num = int(match.group(2))
+            phase_map[phase_num] = full_title
 
         for task in tasks:
+            # Derive phase from task ID (e.g., "1.2" -> Phase 1, "2.1" -> Phase 2)
+            phase_num = int(task.id.split(".")[0]) if "." in task.id else 1
+            phase_title = phase_map.get(phase_num, f"Phase {phase_num}")
+
             task_data = {
                 "spec": spec_dir.name,
                 "id": task.id,
                 "title": task.title,
                 "status": task.status,
                 "dependencies": task.dependencies,
+                "phase": phase_num,
+                "phase_title": phase_title,
             }
             all_tasks.append(task_data)
 
@@ -2273,12 +2342,26 @@ def tasks_cmd(spec_name: str | None, status: str, format: str):
     if status != "all":
         all_tasks = [t for t in all_tasks if t["status"] == status]
 
+    # Sort tasks by spec, then phase, then ID for consistent grouping
+    all_tasks.sort(key=lambda t: (t["spec"], t["phase"], t["id"]))
+
     # Output formatting
     if format == "json":
         # Summary counts
         pending_count = sum(1 for t in all_tasks if t["status"] == "pending")
         in_progress_count = sum(1 for t in all_tasks if t["status"] == "in_progress")
         complete_count = sum(1 for t in all_tasks if t["status"] == "complete")
+
+        # Build grouped structure for structured access
+        grouped: dict[str, dict[str, list[dict]]] = {}
+        for task in all_tasks:
+            spec = task["spec"]
+            phase_title = task["phase_title"]
+            if spec not in grouped:
+                grouped[spec] = {}
+            if phase_title not in grouped[spec]:
+                grouped[spec][phase_title] = []
+            grouped[spec][phase_title].append(task)
 
         output = {
             "filter": status,
@@ -2289,14 +2372,32 @@ def tasks_cmd(spec_name: str | None, status: str, format: str):
                 "total": len(all_tasks),
             },
             "tasks": all_tasks,
+            "grouped": grouped,
         }
         console.print(json.dumps(output, indent=2))
         return
 
     if format == "text":
+        current_spec = None
+        current_phase = None
         for task in all_tasks:
-            icon = {"pending": "○", "in_progress": "◐", "complete": "✓"}.get(task["status"], "?")
-            print(f"{icon} {task['spec']}:{task['id']} {task['title']}")
+            # Print spec header when spec changes
+            if task["spec"] != current_spec:
+                if current_spec is not None:
+                    print()  # Blank line between specs
+                print(f"# {task['spec']}")
+                current_spec = task["spec"]
+                current_phase = None  # Reset phase tracking for new spec
+
+            # Print phase header when phase changes
+            if task["phase_title"] != current_phase:
+                print(f"\n## {task['phase_title']}")
+                current_phase = task["phase_title"]
+
+            icon = {"pending": "○", "in_progress": "◐", "complete": "✓"}.get(
+                task["status"], "?"
+            )
+            print(f"  {icon} {task['id']} {task['title']}")
         return
 
     # Rich format (default)
@@ -2304,24 +2405,35 @@ def tasks_cmd(spec_name: str | None, status: str, format: str):
         console.print(f"[dim]No {status if status != 'all' else ''} tasks found.[/dim]")
         return
 
-    # Group by spec
-    specs_seen: set[str] = set()
-    current_spec = None
+    status_icons = {
+        "pending": "○",
+        "in_progress": "[yellow]◐[/yellow]",
+        "complete": "[green]✓[/green]",
+    }
 
     console.print()
-    table = Table(show_header=True, header_style="bold", box=None, padding=(0, 2))
-    table.add_column("Status", width=3)
-    table.add_column("Task", style="cyan")
-    table.add_column("Title")
-    table.add_column("Spec", style="dim")
+
+    # Display tasks grouped by spec and phase
+    current_spec = None
+    current_phase = None
 
     for task in all_tasks:
-        icon = {"pending": "○", "in_progress": "[yellow]◐[/yellow]", "complete": "[green]✓[/green]"}.get(
-            task["status"], "?"
-        )
-        table.add_row(icon, task["id"], task["title"], task["spec"])
+        # Print spec header when spec changes
+        if task["spec"] != current_spec:
+            if current_spec is not None:
+                console.print()  # Blank line between specs
+            console.print(f"[bold cyan]{task['spec']}[/bold cyan]")
+            current_spec = task["spec"]
+            current_phase = None  # Reset phase tracking for new spec
 
-    console.print(table)
+        # Print phase header when phase changes
+        if task["phase_title"] != current_phase:
+            console.print(f"\n  [bold]{task['phase_title']}[/bold]")
+            current_phase = task["phase_title"]
+
+        # Print task
+        icon = status_icons.get(task["status"], "?")
+        console.print(f"    {icon}  [cyan]{task['id']}[/cyan]  {task['title']}")
 
     # Summary
     pending_count = sum(1 for t in all_tasks if t["status"] == "pending")
@@ -2336,7 +2448,7 @@ def tasks_cmd(spec_name: str | None, status: str, format: str):
 
 
 # Register workspace commands
-from ldf.workspace.commands import workspace
+from ldf.workspace.commands import workspace  # noqa: E402
 
 main.add_command(workspace)
 

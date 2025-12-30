@@ -4,7 +4,7 @@ import json
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import yaml
 from rich.table import Table
@@ -20,9 +20,6 @@ from ldf.utils.spec_parser import (
     extract_tasks,
     parse_spec,
 )
-
-if TYPE_CHECKING:
-    from ldf.models.workspace import WorkspaceManifest
 
 logger = get_logger(__name__)
 
@@ -68,6 +65,12 @@ SARIF_RULES = {
         "id": "ldf/incomplete-guardrail-row",
         "name": "IncompleteGuardrailRow",
         "shortDescription": {"text": "Guardrail matrix row is incomplete"},
+        "helpUri": "https://github.com/LLMdotInfo/ldf#guardrail-coverage",
+    },
+    "ldf/na-missing-justification": {
+        "id": "ldf/na-missing-justification",
+        "name": "NAMissingJustification",
+        "shortDescription": {"text": "N/A status requires justification (use 'N/A - <reason>')"},
         "helpUri": "https://github.com/LLMdotInfo/ldf#guardrail-coverage",
     },
     "ldf/missing-task-checklist": {
@@ -168,6 +171,7 @@ def lint_specs(
     output_format: str = "rich",
     output_file: str | None = None,
     verbose: bool = False,
+    project_root: Path | None = None,
 ) -> int:
     """Lint spec files against guardrail requirements.
 
@@ -178,11 +182,13 @@ def lint_specs(
         output_format: "rich" for terminal, "ci" for GitHub Actions, "sarif" for scanning
         output_file: Output file for sarif format (default: stdout)
         verbose: Show detailed per-file lint output with error messages
+        project_root: Project root directory (defaults to cwd)
 
     Returns:
         Exit code (0 for success, 1 for failures)
     """
-    project_root = Path.cwd()
+    if project_root is None:
+        project_root = Path.cwd()
     ci_mode = output_format == "ci"
     sarif_mode = output_format == "sarif"
     json_mode = output_format == "json"
@@ -643,10 +649,11 @@ def _validate_guardrail_matrix(
         if not row.design_ref and not row.is_not_applicable:
             warnings.append(f"Guardrail {row.guardrail_id}: Missing design reference")
 
-        # Check N/A has justification
+        # Check N/A has justification (require "N/A - <reason>" format)
         if row.is_not_applicable and not row.justification:
-            # N/A without justification
-            warnings.append(f"Guardrail {row.guardrail_id}: N/A status needs justification")
+            warnings.append(
+                f"Guardrail {row.guardrail_id}: N/A status requires justification"
+            )
 
         # Check owner for non-N/A rows
         if not row.is_not_applicable and not row.owner:
@@ -1337,13 +1344,13 @@ def _validate_guardrail_matrix_with_report(
                 )
             )
 
-        # Check N/A has justification
+        # Check N/A has justification (require "N/A - <reason>" format)
         if row.is_not_applicable and not row.justification:
-            msg = f"Guardrail {row.guardrail_id}: N/A status needs justification"
+            msg = f"Guardrail {row.guardrail_id}: N/A status requires justification"
             warnings.append(msg)
             results.append(
                 LintResult(
-                    rule_id="ldf/incomplete-guardrail-row",
+                    rule_id="ldf/na-missing-justification",
                     level="warning",
                     message=msg,
                     spec_name=spec_name,
@@ -1531,12 +1538,14 @@ def validate_spec_references(
 def lint_workspace_references(
     workspace_root: Path,
     output_format: str = "rich",
+    verbose: bool = False,
 ) -> int:
     """Validate all cross-project references in a workspace.
 
     Args:
         workspace_root: Workspace root directory
         output_format: Output format ("rich", "json", "text")
+        verbose: Show detailed reference information including duplicate counts
 
     Returns:
         Exit code (0 for success, 1 for errors)
@@ -1601,5 +1610,14 @@ def lint_workspace_references(
         if not broken_refs and not cycles:
             total = sum(len(refs) for refs in all_refs.values())
             console.print(f"\n[green]✓ All {total} cross-project reference(s) are valid.[/green]")
+
+        if verbose:
+            console.print(
+                "\n[dim]Note: References are deduplicated - "
+                "each unique @project:spec is counted once.[/dim]"
+            )
+            console.print(
+                "[dim]The same broken reference appearing multiple times is reported once.[/dim]"
+            )
 
     return 1 if broken_refs or cycles else 0
