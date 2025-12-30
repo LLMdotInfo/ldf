@@ -309,6 +309,6 @@ jobs:
 
       - name: Run security audit
         run: |
-          # Install dependencies only (not the local package) for security audit
-          pip install click jinja2 pyyaml questionary rich
+          # Install dependencies from pyproject.toml (not the local package) for security audit
+          pip install $(python -c "import tomllib; print(' '.join(tomllib.load(open('pyproject.toml','rb'))['project']['dependencies']))")
           pip-audit --strict
