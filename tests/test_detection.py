@@ -615,6 +615,7 @@ class TestGetSpecsSummarySymlinkSecurity:
 
         if os.name == "nt":
             import pytest
+
             pytest.skip("Symlink tests not supported on Windows")
 
         ldf_dir = tmp_path / ".ldf"
@@ -662,6 +663,7 @@ class TestGetSpecsSummarySymlinkSecurity:
 
         if os.name == "nt":
             import pytest
+
             pytest.skip("Symlink tests not supported on Windows")
 
         ldf_dir = tmp_path / ".ldf"

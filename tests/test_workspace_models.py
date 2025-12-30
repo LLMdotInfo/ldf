@@ -25,18 +25,13 @@ class TestProjectEntry:
 
     def test_from_dict_with_alias(self):
         """Test creating from dict with explicit alias."""
-        entry = ProjectEntry.from_dict({
-            "path": "services/auth",
-            "alias": "authentication"
-        })
+        entry = ProjectEntry.from_dict({"path": "services/auth", "alias": "authentication"})
         assert entry.path == "services/auth"
         assert entry.alias == "authentication"
 
     def test_from_dict_auto_generates_alias(self):
         """Test auto-generating alias from path when not provided."""
-        entry = ProjectEntry.from_dict({
-            "path": "services/user-auth"
-        })
+        entry = ProjectEntry.from_dict({"path": "services/user-auth"})
         assert entry.path == "services/user-auth"
         assert entry.alias == "user-auth"
 
@@ -70,10 +65,9 @@ class TestDiscoveryConfig:
 
     def test_from_dict_custom_values(self):
         """Test from_dict with custom values."""
-        config = DiscoveryConfig.from_dict({
-            "patterns": ["**/ldf.yaml"],
-            "exclude": ["build", "dist"]
-        })
+        config = DiscoveryConfig.from_dict(
+            {"patterns": ["**/ldf.yaml"], "exclude": ["build", "dist"]}
+        )
         assert config.patterns == ["**/ldf.yaml"]
         assert config.exclude == ["build", "dist"]
 
@@ -99,24 +93,23 @@ class TestWorkspaceProjects:
 
     def test_from_dict_with_explicit_projects(self):
         """Test from_dict with explicit project entries."""
-        projects = WorkspaceProjects.from_dict({
-            "explicit": [
-                {"path": "services/auth", "alias": "auth"},
-                {"path": "services/billing", "alias": "billing"}
-            ]
-        })
+        projects = WorkspaceProjects.from_dict(
+            {
+                "explicit": [
+                    {"path": "services/auth", "alias": "auth"},
+                    {"path": "services/billing", "alias": "billing"},
+                ]
+            }
+        )
         assert len(projects.explicit) == 2
         assert projects.explicit[0].alias == "auth"
         assert projects.explicit[1].alias == "billing"
 
     def test_from_dict_with_discovery(self):
         """Test from_dict with custom discovery config."""
-        projects = WorkspaceProjects.from_dict({
-            "discovery": {
-                "patterns": ["**/project.yaml"],
-                "exclude": ["temp"]
-            }
-        })
+        projects = WorkspaceProjects.from_dict(
+            {"discovery": {"patterns": ["**/project.yaml"], "exclude": ["temp"]}}
+        )
         assert projects.discovery.patterns == ["**/project.yaml"]
         assert projects.discovery.exclude == ["temp"]
 
@@ -145,15 +138,17 @@ class TestSharedConfig:
 
     def test_from_dict_custom_values(self):
         """Test from_dict with custom values."""
-        config = SharedConfig.from_dict({
-            "path": ".shared-resources/",
-            "inherit": {
-                "guardrails": False,
-                "templates": False,
-                "question_packs": True,
-                "macros": False
+        config = SharedConfig.from_dict(
+            {
+                "path": ".shared-resources/",
+                "inherit": {
+                    "guardrails": False,
+                    "templates": False,
+                    "question_packs": True,
+                    "macros": False,
+                },
             }
-        })
+        )
         assert config.path == ".shared-resources/"
         assert config.inherit_guardrails is False
         assert config.inherit_templates is False
@@ -196,10 +191,7 @@ class TestReportingConfig:
 
     def test_from_dict_custom_values(self):
         """Test from_dict with custom values."""
-        config = ReportingConfig.from_dict({
-            "enabled": False,
-            "output_dir": "reports/"
-        })
+        config = ReportingConfig.from_dict({"enabled": False, "output_dir": "reports/"})
         assert config.enabled is False
         assert config.output_dir == "reports/"
 
@@ -221,19 +213,16 @@ class TestWorkspaceManifest:
 
     def test_from_dict_full(self):
         """Test from_dict with full data."""
-        manifest = WorkspaceManifest.from_dict({
-            "version": "2.0",
-            "name": "my-workspace",
-            "projects": {
-                "explicit": [{"path": "services/auth", "alias": "auth"}]
-            },
-            "shared": {
-                "path": ".shared/",
-                "inherit": {"guardrails": False}
-            },
-            "references": {"enabled": False},
-            "reporting": {"enabled": False}
-        })
+        manifest = WorkspaceManifest.from_dict(
+            {
+                "version": "2.0",
+                "name": "my-workspace",
+                "projects": {"explicit": [{"path": "services/auth", "alias": "auth"}]},
+                "shared": {"path": ".shared/", "inherit": {"guardrails": False}},
+                "references": {"enabled": False},
+                "reporting": {"enabled": False},
+            }
+        )
         assert manifest.version == "2.0"
         assert manifest.name == "my-workspace"
         assert len(manifest.projects.explicit) == 1
@@ -243,15 +232,17 @@ class TestWorkspaceManifest:
 
     def test_get_all_project_entries_explicit_only(self):
         """Test get_all_project_entries with only explicit projects."""
-        manifest = WorkspaceManifest.from_dict({
-            "name": "test",
-            "projects": {
-                "explicit": [
-                    {"path": "services/auth", "alias": "auth"},
-                    {"path": "services/billing", "alias": "billing"}
-                ]
+        manifest = WorkspaceManifest.from_dict(
+            {
+                "name": "test",
+                "projects": {
+                    "explicit": [
+                        {"path": "services/auth", "alias": "auth"},
+                        {"path": "services/billing", "alias": "billing"},
+                    ]
+                },
             }
-        })
+        )
         # No workspace_root means no discovery
         entries = manifest.get_all_project_entries()
         assert len(entries) == 2
@@ -265,14 +256,9 @@ class TestWorkspaceManifest:
         auth_project.mkdir(parents=True)
         (auth_project / "config.yaml").write_text("")
 
-        manifest = WorkspaceManifest.from_dict({
-            "name": "test",
-            "projects": {
-                "discovery": {
-                    "patterns": ["**/.ldf/config.yaml"]
-                }
-            }
-        })
+        manifest = WorkspaceManifest.from_dict(
+            {"name": "test", "projects": {"discovery": {"patterns": ["**/.ldf/config.yaml"]}}}
+        )
 
         entries = manifest.get_all_project_entries(tmp_path)
         assert len(entries) == 1
@@ -286,17 +272,15 @@ class TestWorkspaceManifest:
         auth_project.mkdir(parents=True)
         (auth_project / "config.yaml").write_text("")
 
-        manifest = WorkspaceManifest.from_dict({
-            "name": "test",
-            "projects": {
-                "explicit": [
-                    {"path": "services/auth", "alias": "auth-explicit"}
-                ],
-                "discovery": {
-                    "patterns": ["**/.ldf/config.yaml"]
-                }
+        manifest = WorkspaceManifest.from_dict(
+            {
+                "name": "test",
+                "projects": {
+                    "explicit": [{"path": "services/auth", "alias": "auth-explicit"}],
+                    "discovery": {"patterns": ["**/.ldf/config.yaml"]},
+                },
             }
-        })
+        )
 
         entries = manifest.get_all_project_entries(tmp_path)
         # Should only have 1 entry (explicit takes precedence)
@@ -371,14 +355,9 @@ class TestDiscoverProjects:
         project.parent.mkdir(parents=True)
         project.write_text("")
 
-        manifest = WorkspaceManifest.from_dict({
-            "name": "test",
-            "projects": {
-                "discovery": {
-                    "patterns": ["**/ldf.yaml"]
-                }
-            }
-        })
+        manifest = WorkspaceManifest.from_dict(
+            {"name": "test", "projects": {"discovery": {"patterns": ["**/ldf.yaml"]}}}
+        )
         discovered = manifest._discover_projects(tmp_path)
 
         # Pattern matches ldf.yaml, so parent is "web" and parent.parent is "apps"
@@ -396,15 +375,14 @@ class TestDiscoverProjects:
         valid.mkdir(parents=True)
         (valid / "config.yaml").write_text("")
 
-        manifest = WorkspaceManifest.from_dict({
-            "name": "test",
-            "projects": {
-                "discovery": {
-                    "patterns": ["**/.ldf/config.yaml"],
-                    "exclude": ["legacy"]
-                }
+        manifest = WorkspaceManifest.from_dict(
+            {
+                "name": "test",
+                "projects": {
+                    "discovery": {"patterns": ["**/.ldf/config.yaml"], "exclude": ["legacy"]}
+                },
             }
-        })
+        )
         discovered = manifest._discover_projects(tmp_path)
 
         assert len(discovered) == 1
@@ -433,15 +411,18 @@ class TestProjectInfo:
 
     def test_from_dict_full(self):
         """Test from_dict with full data."""
-        info = ProjectInfo.from_dict("auth", {
-            "path": "services/auth",
-            "name": "Authentication Service",
-            "version": "2.0.0",
-            "ldf_version": "1.1.0",
-            "specs": ["login", "logout", "registration"],
-            "coverage": 85.5,
-            "last_lint": "2024-01-15T10:30:00"
-        })
+        info = ProjectInfo.from_dict(
+            "auth",
+            {
+                "path": "services/auth",
+                "name": "Authentication Service",
+                "version": "2.0.0",
+                "ldf_version": "1.1.0",
+                "specs": ["login", "logout", "registration"],
+                "coverage": 85.5,
+                "last_lint": "2024-01-15T10:30:00",
+            },
+        )
         assert info.alias == "auth"
         assert info.path == "services/auth"
         assert info.name == "Authentication Service"
@@ -453,16 +434,12 @@ class TestProjectInfo:
 
     def test_from_dict_invalid_last_lint(self):
         """Test from_dict with invalid last_lint value."""
-        info = ProjectInfo.from_dict("auth", {
-            "last_lint": "not-a-date"
-        })
+        info = ProjectInfo.from_dict("auth", {"last_lint": "not-a-date"})
         assert info.last_lint is None
 
     def test_from_dict_last_lint_wrong_type(self):
         """Test from_dict with wrong type for last_lint."""
-        info = ProjectInfo.from_dict("auth", {
-            "last_lint": 12345
-        })
+        info = ProjectInfo.from_dict("auth", {"last_lint": 12345})
         assert info.last_lint is None
 
     def test_to_dict_minimal(self):
@@ -487,7 +464,7 @@ class TestProjectInfo:
             ldf_version="1.1.0",
             specs=["login", "logout"],
             coverage=95.0,
-            last_lint=now
+            last_lint=now,
         )
         result = info.to_dict()
 

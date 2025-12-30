@@ -1,0 +1,133 @@
+name: Bug Report
+description: Report a bug in the LDF CLI
+title: "[Bug]: "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug! Please fill out the form below to help us investigate.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Bug Description
+      description: A clear and concise description of the bug
+      placeholder: Describe what went wrong...
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to Reproduce
+      description: Steps to reproduce the behavior
+      placeholder: |
+        1. Run `ldf init ...`
+        2. Execute `ldf lint ...`
+        3. See error
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: What you expected to happen
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual Behavior
+      description: What actually happened
+    validations:
+      required: true
+
+  - type: input
+    id: ldf-version
+    attributes:
+      label: LDF Version
+      description: Output of `ldf --version`
+      placeholder: "1.1.2"
+    validations:
+      required: true
+
+  - type: input
+    id: python-version
+    attributes:
+      label: Python Version
+      description: Output of `python --version`
+      placeholder: "3.11.0"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating System
+      options:
+        - macOS
+        - Linux (Ubuntu/Debian)
+        - Linux (Fedora/RHEL)
+        - Linux (Other)
+        - Windows
+        - Windows (WSL)
+    validations:
+      required: true
+
+  - type: dropdown
+    id: preset
+    attributes:
+      label: LDF Preset (if applicable)
+      description: Which preset are you using?
+      options:
+        - None (core only)
+        - saas
+        - fintech
+        - healthcare
+        - api-only
+    validations:
+      required: false
+
+  - type: dropdown
+    id: mcp-server
+    attributes:
+      label: MCP Server (if applicable)
+      description: Which MCP server is involved?
+      options:
+        - Not applicable
+        - spec_inspector
+        - coverage_reporter
+        - db_inspector
+    validations:
+      required: false
+
+  - type: textarea
+    id: error-output
+    attributes:
+      label: Error Output
+      description: Paste any error messages or stack traces
+      render: shell
+    validations:
+      required: false
+
+  - type: textarea
+    id: config
+    attributes:
+      label: Configuration Files
+      description: Paste relevant config (guardrails.yaml, config.yaml, etc.)
+      render: yaml
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Code of Conduct
+      options:
+        - label: I have searched existing issues and this is not a duplicate
+          required: true
+        - label: I agree to follow the project's Code of Conduct
+          required: true

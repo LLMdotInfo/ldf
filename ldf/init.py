@@ -800,7 +800,7 @@ def repair_project(project_root: Path) -> None:
 
     # Repair question packs
     qp_dir = ldf_dir / "question-packs"
-    existing_packs = set()
+    existing_packs: set[str] = set()
     if qp_dir.exists():
         # Check both core/ and optional/ subdirectories
         for subdir in ["core", "optional"]:

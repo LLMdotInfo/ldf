@@ -195,6 +195,7 @@ class TestListSpecsSymlinkSecurity:
 
         if os.name == "nt":
             import pytest
+
             pytest.skip("Symlink tests not supported on Windows")
 
         # Create a real spec
@@ -237,6 +238,7 @@ class TestGetSpecPathSymlinkSecurity:
 
         if os.name == "nt":
             import pytest
+
             pytest.skip("Symlink tests not supported on Windows")
 
         # Create specs directory
@@ -258,6 +260,7 @@ class TestGetSpecPathSymlinkSecurity:
 
         if os.name == "nt":
             import pytest
+
             pytest.skip("Symlink tests not supported on Windows")
 
         # Create a real spec

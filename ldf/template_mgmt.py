@@ -272,7 +272,7 @@ def _scan_for_secrets(ldf_dir: Path, include: list[str]) -> list[str]:
     Returns:
         List of warnings
     """
-    warnings = []
+    warnings: list[str] = []
 
     for component in include:
         component_path = _get_component_path(ldf_dir, component)

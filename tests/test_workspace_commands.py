@@ -240,6 +240,7 @@ class TestWorkspaceAdd:
     def test_add_project(self, runner, tmp_path):
         """Test adding a project to workspace."""
         import os
+
         # Initialize workspace first
         os.chdir(tmp_path)
         runner.invoke(workspace, ["init"])
@@ -261,6 +262,7 @@ class TestWorkspaceAdd:
     def test_add_with_custom_alias(self, runner, tmp_path):
         """Test adding a project with custom alias."""
         import os
+
         os.chdir(tmp_path)
         runner.invoke(workspace, ["init"])
 
@@ -274,6 +276,7 @@ class TestWorkspaceAdd:
     def test_add_duplicate_alias_fails(self, runner, tmp_path):
         """Test adding project with duplicate alias fails."""
         import os
+
         os.chdir(tmp_path)
         runner.invoke(workspace, ["init"])
 
@@ -290,6 +293,7 @@ class TestWorkspaceAdd:
     def test_add_duplicate_path_skipped(self, runner, tmp_path):
         """Test adding same project path is skipped."""
         import os
+
         os.chdir(tmp_path)
         runner.invoke(workspace, ["init"])
 
@@ -305,6 +309,7 @@ class TestWorkspaceAdd:
     def test_add_warns_if_no_ldf(self, runner, tmp_path):
         """Test add warns if project doesn't have LDF initialized."""
         import os
+
         os.chdir(tmp_path)
         runner.invoke(workspace, ["init"])
 
@@ -545,7 +550,12 @@ class TestWorkspaceListRichOutput:
             "name": "test-workspace",
             "projects": [
                 {"alias": "auth", "path": "services/auth", "state": "current", "version": "1.0.0"},
-                {"alias": "billing", "path": "services/billing", "state": "outdated", "version": "0.9.0"},
+                {
+                    "alias": "billing",
+                    "path": "services/billing",
+                    "state": "outdated",
+                    "version": "0.9.0",
+                },
             ],
             "shared": {"exists": False},
         }
@@ -626,6 +636,7 @@ class TestWorkspaceReportFull:
         assert result.exit_code == 0
 
         import json
+
         data = json.loads(result.output)
         assert "workspace" in data
         assert "summary" in data
@@ -655,7 +666,9 @@ class TestWorkspaceReportFull:
         runner.invoke(workspace, ["init"])
 
         output_file = tmp_path / "report.json"
-        result = runner.invoke(workspace, ["report", "--format", "json", "--output", str(output_file)])
+        result = runner.invoke(
+            workspace, ["report", "--format", "json", "--output", str(output_file)]
+        )
         assert result.exit_code == 0
         assert output_file.exists()
 
@@ -710,6 +723,7 @@ class TestWorkspaceGraphFull:
         assert result.exit_code == 0
 
         import json
+
         data = json.loads(result.output)
         # JSON output is a dict of project -> list of dependencies
         assert isinstance(data, dict)

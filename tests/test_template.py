@@ -919,8 +919,9 @@ ldf_version: "{__version__}"
         result = verify_template(template_dir)
 
         # Should detect Python file outside of actual macros/ directory
-        assert any("Python script outside macros/" in err for err in result.errors), \
+        assert any("Python script outside macros/" in err for err in result.errors), (
             f"Expected error about Python outside macros, got: {result.errors}"
+        )
 
     def test_python_in_my_macros_directory_rejected(self, tmp_path: Path):
         """Test that .py files in my-macros/ are rejected (not actual macros/)."""
@@ -943,8 +944,9 @@ ldf_version: "{__version__}"
         result = verify_template(template_dir)
 
         # Should detect Python file outside of actual macros/ directory
-        assert any("Python script outside macros/" in err for err in result.errors), \
+        assert any("Python script outside macros/" in err for err in result.errors), (
             f"Expected error about Python outside macros, got: {result.errors}"
+        )
 
     def test_python_in_actual_macros_directory_allowed(self, tmp_path: Path):
         """Test that .py files in actual macros/ directory are allowed."""

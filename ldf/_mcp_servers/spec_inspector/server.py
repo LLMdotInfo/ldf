@@ -511,8 +511,9 @@ async def list_specs() -> dict[str, Any]:
         return {"specs": [], "count": 0}
 
     # Use is_safe_directory_entry to filter symlinks escaping specs_dir and hidden dirs
-    specs = [d.name for d in specs_dir.iterdir()
-             if d.is_dir() and is_safe_directory_entry(d, specs_dir)]
+    specs = [
+        d.name for d in specs_dir.iterdir() if d.is_dir() and is_safe_directory_entry(d, specs_dir)
+    ]
 
     return {"count": len(specs), "specs": sorted(specs)}
 

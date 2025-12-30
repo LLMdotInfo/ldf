@@ -103,7 +103,9 @@ class GuardrailTracker:
         def is_todo(status: str) -> bool:
             return status.upper() == "TODO"
 
-        addressed = len([row for row in matrix if not is_na(row["status"]) and not is_todo(row["status"])])
+        addressed = len(
+            [row for row in matrix if not is_na(row["status"]) and not is_todo(row["status"])]
+        )
         not_applicable = len([row for row in matrix if is_na(row["status"])])
         todo = len([row for row in matrix if is_todo(row["status"])])
 

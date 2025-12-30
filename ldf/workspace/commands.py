@@ -101,9 +101,7 @@ def init(name: str | None, discover: bool, force: bool, create_shared: bool):
         "version": "1.0",
         "name": workspace_name,
         "projects": {
-            "explicit": [
-                {"path": p["path"], "alias": p["alias"]} for p in discovered_projects
-            ],
+            "explicit": [{"path": p["path"], "alias": p["alias"]} for p in discovered_projects],
             "discovery": {
                 "patterns": ["**/.ldf/config.yaml"],
                 "exclude": ["node_modules", ".venv", "vendor", ".git"],
@@ -300,10 +298,12 @@ def add(project_path: str, alias: str | None):
         return
 
     # Add the project
-    manifest_data["projects"]["explicit"].append({
-        "path": str(relative_path),
-        "alias": project_alias,
-    })
+    manifest_data["projects"]["explicit"].append(
+        {
+            "path": str(relative_path),
+            "alias": project_alias,
+        }
+    )
 
     # Write updated manifest
     with open(manifest_path, "w") as f:
@@ -407,10 +407,12 @@ def _discover_ldf_projects(workspace_root: Path) -> list[dict]:
         if relative_path == Path("."):
             continue
 
-        projects.append({
-            "path": str(relative_path),
-            "alias": project_dir.name,
-        })
+        projects.append(
+            {
+                "path": str(relative_path),
+                "alias": project_dir.name,
+            }
+        )
 
     return sorted(projects, key=lambda x: x["path"])
 
@@ -637,8 +639,8 @@ def _print_rich_report(report_data: dict) -> None:
     # Summary
     summary = report_data["summary"]
     console.print("[bold]Summary[/bold]")
-    total = summary['total_projects']
-    with_ldf = summary['projects_with_ldf']
+    total = summary["total_projects"]
+    with_ldf = summary["projects_with_ldf"]
     console.print(f"  Projects: {total} ({with_ldf} with LDF)")
     console.print(f"  Total Specs: {summary['total_specs']}")
     if summary["average_coverage"]:
@@ -685,10 +687,10 @@ def _generate_html_report(report_data: dict) -> str:
         coverage = f"{proj['coverage']:.0f}%" if proj["coverage"] else "-"
         projects_html += f"""
         <tr>
-            <td><strong>{proj['alias']}</strong></td>
-            <td>{proj['path']}</td>
-            <td><span class="{state_class}">{proj['state']}</span></td>
-            <td>{proj['spec_count']}</td>
+            <td><strong>{proj["alias"]}</strong></td>
+            <td>{proj["path"]}</td>
+            <td><span class="{state_class}">{proj["state"]}</span></td>
+            <td>{proj["spec_count"]}</td>
             <td>{coverage}</td>
         </tr>
         """
@@ -698,7 +700,7 @@ def _generate_html_report(report_data: dict) -> str:
     return f"""<!DOCTYPE html>
 <html>
 <head>
-    <title>{report_data['workspace']} - Workspace Report</title>
+    <title>{report_data["workspace"]} - Workspace Report</title>
     <style>
         body {{
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -717,15 +719,15 @@ def _generate_html_report(report_data: dict) -> str:
     </style>
 </head>
 <body>
-    <h1>{report_data['workspace']} Workspace Report</h1>
+    <h1>{report_data["workspace"]} Workspace Report</h1>
 
     <div class="summary">
         <div class="card">
-            <h3>{summary['total_projects']}</h3>
+            <h3>{summary["total_projects"]}</h3>
             <p>Projects</p>
         </div>
         <div class="card">
-            <h3>{summary['total_specs']}</h3>
+            <h3>{summary["total_specs"]}</h3>
             <p>Specs</p>
         </div>
         <div class="card">
@@ -804,7 +806,8 @@ def _generate_dot_graph(graph_data: dict[str, set[str]], workspace_root: Path) -
     help="Output format",
 )
 @click.option(
-    "-v", "--verbose",
+    "-v",
+    "--verbose",
     is_flag=True,
     help="Show detailed reference information",
 )

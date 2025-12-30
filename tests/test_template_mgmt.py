@@ -161,7 +161,9 @@ project:
 
         with patch("ldf.template_mgmt.Prompt.ask") as mock_prompt:
             mock_prompt.side_effect = ["test", "", "1.0.0"]
-            result = export_template(tmp_path, output_path=output_dir, include=["config"], scrub=False)
+            result = export_template(
+                tmp_path, output_path=output_dir, include=["config"], scrub=False
+            )
 
         assert result is True
         config_content = (output_dir / "config.yaml").read_text()
@@ -216,8 +218,10 @@ project:
         ldf_dir.mkdir()
         (ldf_dir / "config.yaml").write_text("password: super-secret-password-123")
 
-        with patch("ldf.template_mgmt.Prompt.ask") as mock_prompt, \
-             patch("ldf.template_mgmt.Confirm.ask") as mock_confirm:
+        with (
+            patch("ldf.template_mgmt.Prompt.ask") as mock_prompt,
+            patch("ldf.template_mgmt.Confirm.ask") as mock_confirm,
+        ):
             mock_prompt.side_effect = ["test", "", "1.0.0"]
             mock_confirm.return_value = False  # User declines
 

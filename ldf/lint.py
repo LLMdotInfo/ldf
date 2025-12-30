@@ -561,7 +561,7 @@ def _check_tasks(filepath: Path, guardrails: list[Guardrail]) -> tuple[list[str]
                 for other_task in tasks:
                     if other_task.id != task.id:
                         other_pattern = rf"\*\*Task\s+{re.escape(other_task.id)}:"
-                        other_match = re.search(other_pattern, content[task_start + 1:])
+                        other_match = re.search(other_pattern, content[task_start + 1 :])
                         if other_match:
                             pos = task_start + 1 + other_match.start()
                             if pos < next_task_pos:
@@ -651,9 +651,7 @@ def _validate_guardrail_matrix(
 
         # Check N/A has justification (require "N/A - <reason>" format)
         if row.is_not_applicable and not row.justification:
-            warnings.append(
-                f"Guardrail {row.guardrail_id}: N/A status requires justification"
-            )
+            warnings.append(f"Guardrail {row.guardrail_id}: N/A status requires justification")
 
         # Check owner for non-N/A rows
         if not row.is_not_applicable and not row.owner:
@@ -780,12 +778,14 @@ def _print_json_summary(
     """
     specs_results = []
     for spec_name, errors, warnings in results:
-        specs_results.append({
-            "spec": spec_name,
-            "errors": errors,
-            "warnings": warnings,
-            "passed": len(errors) == 0 and len(warnings) == 0,
-        })
+        specs_results.append(
+            {
+                "spec": spec_name,
+                "errors": errors,
+                "warnings": warnings,
+                "passed": len(errors) == 0 and len(warnings) == 0,
+            }
+        )
 
     output = {
         "specs_checked": specs_checked,
@@ -1191,7 +1191,7 @@ def _check_tasks_with_report(
                 for other_task in tasks:
                     if other_task.id != task.id:
                         other_pattern = rf"\*\*Task\s+{re.escape(other_task.id)}:"
-                        other_match = re.search(other_pattern, content[task_start + 1:])
+                        other_match = re.search(other_pattern, content[task_start + 1 :])
                         if other_match:
                             pos = task_start + 1 + other_match.start()
                             if pos < next_task_pos:
@@ -1486,8 +1486,8 @@ def validate_spec_references(
     from ldf.project_resolver import WORKSPACE_MANIFEST
     from ldf.utils.references import parse_references_from_file, resolve_reference
 
-    errors = []
-    warnings = []
+    errors: list[str] = []
+    warnings: list[str] = []
 
     # Find workspace root
     workspace_root = None
@@ -1513,9 +1513,8 @@ def validate_spec_references(
         return errors, warnings
 
     # Get shared resources path
-    shared_path = workspace_root / manifest.shared.path
-    if not shared_path.exists():
-        shared_path = None
+    _shared_path = workspace_root / manifest.shared.path
+    shared_path: Path | None = _shared_path if _shared_path.exists() else None
 
     # Check all markdown files in the spec
     for md_file in spec_path.glob("*.md"):
@@ -1527,8 +1526,7 @@ def validate_spec_references(
             if not resolved.exists:
                 line_info = f" (line {ref.line_number})" if ref.line_number else ""
                 error_msg = (
-                    f"Broken reference '{ref.raw}' in {md_file.name}{line_info}: "
-                    f"{resolved.error}"
+                    f"Broken reference '{ref.raw}' in {md_file.name}{line_info}: {resolved.error}"
                 )
                 errors.append(error_msg)
 

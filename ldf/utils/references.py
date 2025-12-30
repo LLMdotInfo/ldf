@@ -35,9 +35,7 @@ REFERENCE_PATTERN = re.compile(
 )
 
 # Matches shared resource references: @shared:resource
-SHARED_REFERENCE_PATTERN = re.compile(
-    r"@shared:(?P<resource>[a-zA-Z0-9_.-]+)"
-)
+SHARED_REFERENCE_PATTERN = re.compile(r"@shared:(?P<resource>[a-zA-Z0-9_.-]+)")
 
 
 @dataclass
@@ -142,9 +140,7 @@ def parse_references(content: str, deduplicate: bool = True) -> list[SpecReferen
     return references
 
 
-def parse_references_from_file(
-    file_path: Path, deduplicate: bool = True
-) -> list[SpecReference]:
+def parse_references_from_file(file_path: Path, deduplicate: bool = True) -> list[SpecReference]:
     """Parse all cross-project references from a file.
 
     Args:
@@ -285,9 +281,7 @@ def validate_references_in_spec(
         references = parse_references_from_file(md_file)
 
         for ref in references:
-            resolved = resolve_reference(
-                ref, workspace_root, manifest, shared_resources_path
-            )
+            resolved = resolve_reference(ref, workspace_root, manifest, shared_resources_path)
             results.append(resolved)
 
     return results
@@ -322,9 +316,8 @@ def validate_all_workspace_references(
         return {}
 
     # Determine shared resources path
-    shared_path = workspace_root / manifest.shared.path
-    if not shared_path.exists():
-        shared_path = None
+    _shared_path = workspace_root / manifest.shared.path
+    shared_path: Path | None = _shared_path if _shared_path.exists() else None
 
     results: dict[str, list[ResolvedReference]] = {}
 

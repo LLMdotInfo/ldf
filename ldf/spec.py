@@ -196,8 +196,9 @@ def list_specs(project_root: Path | None = None) -> list[str]:
         return []
 
     # Use is_safe_directory_entry to filter symlinks escaping specs_dir and hidden dirs
-    return [d.name for d in specs_dir.iterdir()
-            if d.is_dir() and is_safe_directory_entry(d, specs_dir)]
+    return [
+        d.name for d in specs_dir.iterdir() if d.is_dir() and is_safe_directory_entry(d, specs_dir)
+    ]
 
 
 def get_spec_path(name: str, project_root: Path | None = None) -> Path | None:

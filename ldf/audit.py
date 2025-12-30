@@ -138,7 +138,12 @@ def run_audit(
                 console.print("  ldf audit --type spec-review --api --agent chatgpt")
         else:
             _generate_audit_request(
-                audit_type, include_secrets, skip_confirm, spec_name, dry_run, pattern,
+                audit_type,
+                include_secrets,
+                skip_confirm,
+                spec_name,
+                dry_run,
+                pattern,
                 project_root=project_root,
             )
     else:
@@ -374,6 +379,7 @@ def _generate_audit_request(
         The generated audit request content, or None if aborted/failed
     """
     import fnmatch
+
     if project_root is None:
         project_root = Path.cwd()
     console.print(f"\n[bold blue]Generating {audit_type} audit request...[/bold blue]\n")

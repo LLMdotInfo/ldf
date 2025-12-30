@@ -1267,7 +1267,9 @@ class TestCliEdgeCases:
 
         monkeypatch.chdir(temp_project)
 
-        with patch("ldf.coverage.report_coverage", return_value={"status": "FAIL", "coverage_pct": 50.0}):
+        with patch(
+            "ldf.coverage.report_coverage", return_value={"status": "FAIL", "coverage_pct": 50.0}
+        ):
             result = runner.invoke(cli, ["coverage", "--fail-under", "80"])
 
         assert result.exit_code == 1

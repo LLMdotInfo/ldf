@@ -112,8 +112,7 @@ class TestProjectNotFoundError:
     def test_error_with_available_projects(self):
         """Test error with available projects list."""
         error = ProjectNotFoundError(
-            "Project 'foo' not found",
-            available_projects=["auth", "billing", "api"]
+            "Project 'foo' not found", available_projects=["auth", "billing", "api"]
         )
         assert "foo" in str(error)
         assert error.available_projects == ["auth", "billing", "api"]

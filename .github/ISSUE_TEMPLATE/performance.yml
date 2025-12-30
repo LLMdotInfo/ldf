@@ -1,0 +1,81 @@
+name: Performance Issue
+description: Report a performance problem with LDF
+title: "[Performance]: "
+labels: ["performance", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Help us identify performance bottlenecks! Please provide as much detail as possible.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Performance Issue Description
+      description: What operation is slow or resource-intensive?
+      placeholder: The `ldf lint` command takes a very long time when...
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to Reproduce
+      description: How can we reproduce this performance issue?
+      placeholder: |
+        1. Create a project with X specs
+        2. Run `ldf lint`
+        3. Observe slow performance
+    validations:
+      required: true
+
+  - type: input
+    id: expected-performance
+    attributes:
+      label: Expected Performance
+      description: What timing or resource usage do you expect?
+      placeholder: "Should complete in under 5 seconds"
+    validations:
+      required: true
+
+  - type: input
+    id: actual-performance
+    attributes:
+      label: Actual Performance
+      description: What timing or resource usage do you observe?
+      placeholder: "Takes over 60 seconds"
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Hardware specs, OS, and any relevant details
+      placeholder: |
+        - Machine: MacBook Pro M1, 16GB RAM
+        - OS: macOS 14.0
+        - Python: 3.11.0
+        - LDF: 1.1.2
+        - Project size: 50 specs, 200 tasks
+    validations:
+      required: true
+
+  - type: textarea
+    id: profiling
+    attributes:
+      label: Profiling Data
+      description: If you have any profiling output (e.g., from `time` command), please share
+      render: shell
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Code of Conduct
+      options:
+        - label: I have searched existing issues and this is not a duplicate
+          required: true
+        - label: I agree to follow the project's Code of Conduct
+          required: true

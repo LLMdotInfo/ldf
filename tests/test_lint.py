@@ -1544,6 +1544,7 @@ class TestLintOutputFormats:
     def test_text_output_no_specs_dir(self, temp_project: Path, monkeypatch, capsys):
         """Test text output when specs directory doesn't exist."""
         import shutil
+
         specs_dir = temp_project / ".ldf" / "specs"
         if specs_dir.exists():
             shutil.rmtree(specs_dir)
@@ -1559,13 +1560,15 @@ class TestLintOutputFormats:
         project_dir = temp_spec.parent.parent.parent
         monkeypatch.chdir(project_dir)
 
-        result = lint_specs(spec_name="test-feature", lint_all=False, fix=False, output_format="json")
+        result = lint_specs(
+            spec_name="test-feature", lint_all=False, fix=False, output_format="json"
+        )
 
         captured = capsys.readouterr()
         # JSON output may have some text before the JSON, find the JSON part
-        output_lines = captured.out.strip().split('\n')
-        json_start = next((i for i, line in enumerate(output_lines) if line.startswith('{')), 0)
-        json_str = '\n'.join(output_lines[json_start:])
+        output_lines = captured.out.strip().split("\n")
+        json_start = next((i for i, line in enumerate(output_lines) if line.startswith("{")), 0)
+        json_str = "\n".join(output_lines[json_start:])
         output = json.loads(json_str)
         assert "specs" in output or "specs_checked" in output
         # Result may be non-zero if there are warnings (missing answerpacks)
@@ -1579,7 +1582,11 @@ class TestLintOutputFormats:
         result = lint_specs(spec_name="test-feature", lint_all=False, fix=False, output_format="ci")
 
         captured = capsys.readouterr()
-        assert "LINT SUMMARY" in captured.out or "PASSED" in captured.out or "test-feature" in captured.out
+        assert (
+            "LINT SUMMARY" in captured.out
+            or "PASSED" in captured.out
+            or "test-feature" in captured.out
+        )
         assert result == 0
 
     def test_text_output_valid_spec(self, temp_spec: Path, monkeypatch, capsys):
@@ -1587,7 +1594,9 @@ class TestLintOutputFormats:
         project_dir = temp_spec.parent.parent.parent
         monkeypatch.chdir(project_dir)
 
-        result = lint_specs(spec_name="test-feature", lint_all=False, fix=False, output_format="text")
+        result = lint_specs(
+            spec_name="test-feature", lint_all=False, fix=False, output_format="text"
+        )
 
         captured = capsys.readouterr()
         # Text mode should print something
@@ -1729,15 +1738,14 @@ shared:
 class TestLintSecurityValidation:
     """Tests for security validation in linting."""
 
-    def test_lint_with_path_traversal_spec_name_sarif(self, temp_project: Path, monkeypatch, capsys):
+    def test_lint_with_path_traversal_spec_name_sarif(
+        self, temp_project: Path, monkeypatch, capsys
+    ):
         """Test SARIF output for path traversal attempt."""
         monkeypatch.chdir(temp_project)
 
         result = lint_specs(
-            spec_name="../../../etc/passwd",
-            lint_all=False,
-            fix=False,
-            output_format="sarif"
+            spec_name="../../../etc/passwd", lint_all=False, fix=False, output_format="sarif"
         )
 
         captured = capsys.readouterr()
@@ -1751,12 +1759,13 @@ class TestLintSecurityValidation:
         monkeypatch.chdir(temp_project)
 
         result = lint_specs(
-            spec_name="../../../etc/passwd",
-            lint_all=False,
-            fix=False,
-            output_format="ci"
+            spec_name="../../../etc/passwd", lint_all=False, fix=False, output_format="ci"
         )
 
         captured = capsys.readouterr()
         assert result == 1
-        assert "Security" in captured.out or "Error" in captured.out or "failed" in captured.out.lower()
+        assert (
+            "Security" in captured.out
+            or "Error" in captured.out
+            or "failed" in captured.out.lower()
+        )

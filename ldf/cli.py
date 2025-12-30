@@ -80,8 +80,9 @@ def get_project_context(ctx: click.Context) -> "ProjectContext":
     )
 
     # Return cached context if available
-    if ctx.obj.get("project_context"):
-        return ctx.obj["project_context"]
+    cached: ProjectContext | None = ctx.obj.get("project_context")
+    if cached:
+        return cached
 
     # Resolve project context
     try:
@@ -113,11 +114,13 @@ def with_project_context(f):
         def mycommand(project_context):
             print(f"Working in {project_context.project_root}")
     """
+
     @functools.wraps(f)
     @click.pass_context
     def wrapper(ctx, *args, **kwargs):
         project_context = get_project_context(ctx)
         return f(*args, project_context=project_context, **kwargs)
+
     return wrapper
 
 
@@ -1622,7 +1625,7 @@ def template_list(format: str):
 
     from ldf.template import TemplateMetadata
 
-    templates = []
+    templates: list[dict[str, Any]] = []
 
     # Scan framework templates directory
     framework_templates_dir = Path(__file__).parent / "_framework" / "templates"
@@ -1665,11 +1668,13 @@ def template_list(format: str):
                                 description=data.get("description", ""),
                                 components=data.get("components", []),
                             )
-                            templates.append({
-                                "metadata": metadata,
-                                "type": "team",
-                                "path": str(item),
-                            })
+                            templates.append(
+                                {
+                                    "metadata": metadata,
+                                    "type": "team",
+                                    "path": str(item),
+                                }
+                            )
                     except Exception:
                         # Skip invalid templates
                         pass
@@ -1914,7 +1919,7 @@ def add_pack(pack_name: str | None, list_packs: bool, add_all: bool, force: bool
         from rich.table import Table
 
         # Get existing packs in project (check both core/ and optional/ subdirs)
-        existing = set()
+        existing: set[str] = set()
         if qp_dir.exists():
             for subdir in ["core", "optional"]:
                 subdir_path = qp_dir / subdir
@@ -2174,7 +2179,7 @@ def list_packs_cmd(core: bool, optional: bool, installed: bool, format: str):
     all_optional = sorted(set(optional_packs) | (fs_packs - set(all_core)))
 
     # Check installation status
-    existing = set()
+    existing: set[str] = set()
     if qp_dir.exists():
         for subdir in ["core", "optional"]:
             subdir_path = qp_dir / subdir
@@ -2182,23 +2187,27 @@ def list_packs_cmd(core: bool, optional: bool, installed: bool, format: str):
                 existing.update(f.stem for f in subdir_path.glob("*.yaml"))
 
     # Combine and prepare data
-    packs_data = []
-    for pack in all_core:
-        is_installed = pack in existing
-        packs_data.append({
-            "name": pack,
-            "description": get_pack_short(pack),
-            "type": "core",
-            "installed": is_installed,
-        })
-    for pack in all_optional:
-        is_installed = pack in existing
-        packs_data.append({
-            "name": pack,
-            "description": get_pack_short(pack),
-            "type": "optional",
-            "installed": is_installed,
-        })
+    packs_data: list[dict[str, Any]] = []
+    for pack_name in all_core:
+        is_installed = pack_name in existing
+        packs_data.append(
+            {
+                "name": pack_name,
+                "description": get_pack_short(pack_name),
+                "type": "core",
+                "installed": is_installed,
+            }
+        )
+    for pack_name in all_optional:
+        is_installed = pack_name in existing
+        packs_data.append(
+            {
+                "name": pack_name,
+                "description": get_pack_short(pack_name),
+                "type": "optional",
+                "installed": is_installed,
+            }
+        )
 
     # Apply filters
     if core:
@@ -2211,6 +2220,7 @@ def list_packs_cmd(core: bool, optional: bool, installed: bool, format: str):
     # Output
     if format == "json":
         import json
+
         output = {
             "packs": packs_data,
             "total": len(packs_data),
@@ -2322,17 +2332,17 @@ def tasks_cmd(spec_name: str | None, status: str, format: str):
             phase_num = int(match.group(2))
             phase_map[phase_num] = full_title
 
-        for task in tasks:
+        for task_item in tasks:
             # Derive phase from task ID (e.g., "1.2" -> Phase 1, "2.1" -> Phase 2)
-            phase_num = int(task.id.split(".")[0]) if "." in task.id else 1
+            phase_num = int(task_item.id.split(".")[0]) if "." in task_item.id else 1
             phase_title = phase_map.get(phase_num, f"Phase {phase_num}")
 
             task_data = {
                 "spec": spec_dir.name,
-                "id": task.id,
-                "title": task.title,
-                "status": task.status,
-                "dependencies": task.dependencies,
+                "id": task_item.id,
+                "title": task_item.title,
+                "status": task_item.status,
+                "dependencies": task_item.dependencies,
                 "phase": phase_num,
                 "phase_title": phase_title,
             }
@@ -2394,9 +2404,7 @@ def tasks_cmd(spec_name: str | None, status: str, format: str):
                 print(f"\n## {task['phase_title']}")
                 current_phase = task["phase_title"]
 
-            icon = {"pending": "○", "in_progress": "◐", "complete": "✓"}.get(
-                task["status"], "?"
-            )
+            icon = {"pending": "○", "in_progress": "◐", "complete": "✓"}.get(task["status"], "?")
             print(f"  {icon} {task['id']} {task['title']}")
         return
 

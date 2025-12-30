@@ -7,6 +7,7 @@ import json
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
+from typing import Any
 
 import yaml
 
@@ -59,9 +60,9 @@ class DetectionResult:
     recommended_action: str = ""
     recommended_command: str | None = None
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON output."""
-        result = {
+        result: dict[str, Any] = {
             "state": self.state.value,
             "project_root": str(self.project_root),
             "installed_version": self.installed_version,

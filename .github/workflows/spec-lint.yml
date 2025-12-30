@@ -186,11 +186,11 @@ jobs:
           import re
 
           def count_expected_guardrails():
-              """Count expected guardrails from framework/guardrails/core.yaml and any presets."""
+              """Count expected guardrails from ldf/_framework/guardrails/core.yaml and any presets."""
               count = 0
 
               # Count core guardrails
-              core_path = 'framework/guardrails/core.yaml'
+              core_path = 'ldf/_framework/guardrails/core.yaml'
               if os.path.exists(core_path):
                   with open(core_path) as f:
                       core = yaml.safe_load(f)
@@ -205,7 +205,7 @@ jobs:
                       if config and 'guardrails' in config:
                           preset = config['guardrails'].get('preset')
                           if preset:
-                              preset_path = f'framework/guardrails/presets/{preset}.yaml'
+                              preset_path = f'ldf/_framework/guardrails/presets/{preset}.yaml'
                               if os.path.exists(preset_path):
                                   with open(preset_path) as pf:
                                       preset_data = yaml.safe_load(pf)

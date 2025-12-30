@@ -496,12 +496,20 @@ class TestMergeGuardrails:
 
         base = [
             Guardrail(id=1, name="Base Rule", description="Original", severity="low", enabled=True),
-            Guardrail(id=2, name="Unchanged", description="Stays same", severity="medium", enabled=True),
+            Guardrail(
+                id=2, name="Unchanged", description="Stays same", severity="medium", enabled=True
+            ),
         ]
 
         overlay = [
-            Guardrail(id=1, name="Overlay Rule", description="Updated", severity="high", enabled=False,
-                      checklist=["Check 1"]),
+            Guardrail(
+                id=1,
+                name="Overlay Rule",
+                description="Updated",
+                severity="high",
+                enabled=False,
+                checklist=["Check 1"],
+            ),
         ]
 
         result = _merge_guardrails(base, overlay)
@@ -527,7 +535,13 @@ class TestMergeGuardrails:
         ]
 
         overlay = [
-            Guardrail(id=100, name="New Rule", description="Added by overlay", severity="high", enabled=True),
+            Guardrail(
+                id=100,
+                name="New Rule",
+                description="Added by overlay",
+                severity="high",
+                enabled=True,
+            ),
         ]
 
         result = _merge_guardrails(base, overlay)
@@ -542,13 +556,25 @@ class TestMergeGuardrails:
         from ldf.utils.guardrail_loader import Guardrail, _merge_guardrails
 
         base = [
-            Guardrail(id=1, name="Rule", description="", severity="medium", enabled=True,
-                      config={"threshold": 80, "key1": "original"}),
+            Guardrail(
+                id=1,
+                name="Rule",
+                description="",
+                severity="medium",
+                enabled=True,
+                config={"threshold": 80, "key1": "original"},
+            ),
         ]
 
         overlay = [
-            Guardrail(id=1, name="Rule", description="", severity="medium", enabled=True,
-                      config={"threshold": 95, "key2": "new"}),
+            Guardrail(
+                id=1,
+                name="Rule",
+                description="",
+                severity="medium",
+                enabled=True,
+                config={"threshold": 95, "key2": "new"},
+            ),
         ]
 
         result = _merge_guardrails(base, overlay)

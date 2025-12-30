@@ -115,7 +115,7 @@ class ProjectResolver:
             cwd: Current working directory override (defaults to Path.cwd())
         """
         self._cwd = cwd or Path.cwd()
-        self._workspace_cache: tuple[Path, "WorkspaceManifest"] | None = None
+        self._workspace_cache: tuple[Path, WorkspaceManifest] | None = None
 
     def resolve(
         self,
@@ -145,15 +145,13 @@ class ProjectResolver:
 
         # 2. If explicit workspace specified, use it
         workspace_root: Path | None = None
-        manifest: "WorkspaceManifest | None" = None
+        manifest: WorkspaceManifest | None = None
 
         if workspace:
             workspace_root = Path(workspace).resolve()
             manifest = self._load_workspace_manifest(workspace_root)
             if manifest is None:
-                raise WorkspaceNotFoundError(
-                    f"No ldf-workspace.yaml found at {workspace_root}"
-                )
+                raise WorkspaceNotFoundError(f"No ldf-workspace.yaml found at {workspace_root}")
 
         # 3. If project specified, we need workspace context to resolve alias
         if project:
@@ -163,19 +161,15 @@ class ProjectResolver:
                 if workspace_root:
                     manifest = self._load_workspace_manifest(workspace_root)
 
-            if manifest:
+            if manifest and workspace_root:
                 # Resolve project alias to path
-                return self._resolve_project_in_workspace(
-                    project, workspace_root, manifest
-                )
+                return self._resolve_project_in_workspace(project, workspace_root, manifest)
             else:
                 # No workspace - treat project as a path
                 project_path = Path(project).resolve()
                 if self._is_ldf_project(project_path):
                     return ProjectContext(project_root=project_path)
-                raise ProjectNotFoundError(
-                    f"'{project}' is not a valid project path or alias"
-                )
+                raise ProjectNotFoundError(f"'{project}' is not a valid project path or alias")
 
         # 4. No explicit project - try to detect from cwd
         if workspace_root is None:
@@ -242,9 +236,7 @@ class ProjectResolver:
         except yaml.YAMLError as e:
             # Surface YAML parsing errors - these indicate a broken config
             logger.warning(f"Failed to parse workspace manifest {manifest_path}: {e}")
-            raise WorkspaceNotFoundError(
-                f"Invalid workspace manifest at {manifest_path}: {e}"
-            )
+            raise WorkspaceNotFoundError(f"Invalid workspace manifest at {manifest_path}: {e}")
         except (KeyError, TypeError, ValueError, AttributeError) as e:
             # Surface validation errors from WorkspaceManifest.from_dict
             # AttributeError catches cases like passing a string where dict expected

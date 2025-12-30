@@ -207,6 +207,7 @@ class TestGetLastModified:
     def test_uses_latest_file_mtime(self, tmp_path):
         """Test uses the most recently modified file."""
         import time
+
         from ldf.spec_list import _get_last_modified
 
         spec_dir = tmp_path / "test-spec"

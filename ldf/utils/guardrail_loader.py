@@ -271,9 +271,9 @@ def detect_shared_resources_path(project_root: Path) -> Path | None:
             try:
                 with open(manifest_path) as f:
                     data = yaml.safe_load(f) or {}
-                shared_path_str = data.get("shared", {}).get("path", ".ldf-shared")
+                shared_path_str: str = data.get("shared", {}).get("path", ".ldf-shared")
                 # Remove trailing slash for consistent path handling
-                shared_path = current / shared_path_str.rstrip("/")
+                shared_path: Path = current / shared_path_str.rstrip("/")
             except Exception:
                 # Fall back to default if manifest parsing fails
                 shared_path = current / ".ldf-shared"

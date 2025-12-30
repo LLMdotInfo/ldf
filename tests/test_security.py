@@ -489,12 +489,15 @@ class TestMCPSpecInspectorValidation:
         except ImportError:
             pytest.skip("mcp package not installed")
 
-        sys.path.insert(0, str(Path(__file__).parent.parent / "ldf" / "_mcp_servers" / "spec_inspector"))
+        sys.path.insert(
+            0, str(Path(__file__).parent.parent / "ldf" / "_mcp_servers" / "spec_inspector")
+        )
 
         specs_dir = tmp_path / "specs"
         specs_dir.mkdir()
 
         import server
+
         original_specs_dir = server.specs_dir
         server.specs_dir = specs_dir
 

@@ -41,9 +41,7 @@ class DiscoveryConfig:
     """
 
     patterns: list[str] = field(default_factory=lambda: ["**/.ldf/config.yaml"])
-    exclude: list[str] = field(
-        default_factory=lambda: ["node_modules", ".venv", "vendor", ".git"]
-    )
+    exclude: list[str] = field(default_factory=lambda: ["node_modules", ".venv", "vendor", ".git"])
 
     @classmethod
     def from_dict(cls, data: dict[str, Any] | None) -> "DiscoveryConfig":
@@ -251,10 +249,7 @@ class WorkspaceManifest:
                     rel_path = str(project_path.relative_to(workspace_root))
                     if rel_path == ".":
                         continue  # Skip workspace root itself
-                    discovered.append(ProjectEntry(
-                        path=rel_path,
-                        alias=project_path.name
-                    ))
+                    discovered.append(ProjectEntry(path=rel_path, alias=project_path.name))
                 except ValueError:
                     # Path is not relative to workspace_root, skip
                     continue
