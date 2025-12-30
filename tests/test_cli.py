@@ -1770,6 +1770,62 @@ components:
         assert len(team_templates_found) >= 1
         assert any(t["name"] == "my-team-template" for t in team_templates_found)
 
+    def test_template_list_skips_empty_yaml(
+        self, runner: CliRunner, temp_project: Path, monkeypatch
+    ):
+        """Test template list gracefully skips templates with empty YAML (None)."""
+        import json
+
+        monkeypatch.chdir(temp_project)
+
+        # Create a team template with empty YAML file (yaml.safe_load returns None)
+        team_templates = temp_project / ".ldf" / "team-templates" / "empty-template"
+        team_templates.mkdir(parents=True)
+        (team_templates / "template.yaml").write_text("")  # Empty file
+
+        result = runner.invoke(cli, ["template", "list", "--format", "json"])
+
+        # Should not crash, just skip the invalid template
+        assert result.exit_code == 0
+        # Extract just the JSON portion - logging errors may pollute stdout in CI
+        # The JSON ends with "}\n" on its own line (pretty-printed), so find "\n}\n"
+        json_end = result.output.find("\n}\n")
+        if json_end > 0:
+            json_output = result.output[: json_end + 2]  # Include the closing }
+        else:
+            json_output = result.output
+        output = json.loads(json_output)
+        assert "templates" in output
+        # The empty template should be skipped, not cause an error
+        assert not any(t["name"] == "empty-template" for t in output["templates"])
+
+    def test_template_list_skips_non_dict_yaml(
+        self, runner: CliRunner, temp_project: Path, monkeypatch
+    ):
+        """Test template list gracefully skips templates with non-dict YAML content."""
+        import json
+
+        monkeypatch.chdir(temp_project)
+
+        # Create a team template with non-dict YAML (a string or list)
+        team_templates = temp_project / ".ldf" / "team-templates" / "bad-template"
+        team_templates.mkdir(parents=True)
+        (team_templates / "template.yaml").write_text("just a string, not a dict")
+
+        result = runner.invoke(cli, ["template", "list", "--format", "json"])
+
+        # Should not crash, just skip the invalid template
+        assert result.exit_code == 0
+        # Extract just the JSON portion - logging errors may pollute stdout in CI
+        # The JSON ends with "}\n" on its own line (pretty-printed), so find "\n}\n"
+        json_end = result.output.find("\n}\n")
+        if json_end > 0:
+            json_output = result.output[: json_end + 2]  # Include the closing }
+        else:
+            json_output = result.output
+        output = json.loads(json_output)
+        assert "templates" in output
+
 
 class TestPreflightJsonOutput:
     """Tests for preflight --json output."""

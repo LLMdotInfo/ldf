@@ -11,7 +11,10 @@ from pathlib import Path
 import yaml
 
 from ldf.utils.console import console
+from ldf.utils.logging import get_logger
 from ldf.utils.security import SecurityError, validate_spec_name
+
+logger = get_logger(__name__)
 
 
 @dataclass
@@ -191,8 +194,8 @@ def analyze_existing_codebase(project_root: Path) -> ConversionContext:
                     if any(p.lower() in content for p in keywords):
                         if framework not in ctx.detected_frameworks:
                             ctx.detected_frameworks.append(framework)
-            except Exception:
-                pass
+            except OSError as e:
+                logger.debug(f"Failed to parse {fpath}: {e}")
 
     # Suggest preset based on patterns
     preset_scores = {preset: 0 for preset in PRESET_PATTERNS}
@@ -204,8 +207,8 @@ def analyze_existing_codebase(project_root: Path) -> ConversionContext:
         if fpath.exists():
             try:
                 search_content += fpath.read_text(errors="ignore").lower() + "\n"
-            except Exception:
-                pass
+            except OSError as e:
+                logger.debug(f"Failed reading {fpath} for analysis: {e}")
 
     for preset, keywords in PRESET_PATTERNS.items():
         for keyword in keywords:

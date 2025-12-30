@@ -12,6 +12,9 @@ import yaml
 
 from ldf.project_resolver import WORKSPACE_MANIFEST, find_workspace_root
 from ldf.utils.console import console
+from ldf.utils.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 @click.group()
@@ -538,8 +541,8 @@ def report(format: str, output: str | None):
                             project_info["coverage"] = proj_data["coverage"]
                             total_coverage += proj_data["coverage"]
                             coverage_count += 1
-                except Exception:
-                    pass
+                except (OSError, yaml.YAMLError, AttributeError, TypeError, KeyError) as e:
+                    logger.debug(f"Registry not available for {entry.alias}: {e}")
 
         projects_data.append(project_info)
 

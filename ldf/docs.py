@@ -12,6 +12,9 @@ from ldf.utils.descriptions import (
     get_preset_info,
 )
 from ldf.utils.guardrail_loader import get_active_guardrails
+from ldf.utils.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 def export_docs(
@@ -191,8 +194,8 @@ def _generate_packs_section(config: dict[str, Any], ldf_dir: Path) -> str:
                     if len(all_questions) > 5:
                         lines.append(f"\n*... and {len(all_questions) - 5} more questions*")
                     lines.append("")
-            except yaml.YAMLError:
-                pass
+            except yaml.YAMLError as e:
+                logger.warning(f"Skipping pack {pack_name}: invalid YAML - {e}")
 
     return "\n".join(lines)
 

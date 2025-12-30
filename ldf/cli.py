@@ -10,7 +10,9 @@ import yaml
 
 from ldf import __version__
 from ldf.utils.console import console
-from ldf.utils.logging import configure_logging
+from ldf.utils.logging import configure_logging, get_logger
+
+logger = get_logger(__name__)
 
 if TYPE_CHECKING:
     from ldf.project_resolver import ProjectContext
@@ -1647,9 +1649,8 @@ def template_list(format: str):
                             templates.append(
                                 {"metadata": metadata, "type": "framework", "path": str(item)}
                             )
-                    except Exception:
-                        # Skip invalid templates
-                        pass
+                    except (OSError, yaml.YAMLError, KeyError, TypeError, AttributeError) as e:
+                        logger.debug(f"Skipping invalid template at {item}: {e}")
 
     # Scan team templates directory
     team_templates_dir = Path.cwd() / ".ldf" / "team-templates"
@@ -1675,9 +1676,8 @@ def template_list(format: str):
                                     "path": str(item),
                                 }
                             )
-                    except Exception:
-                        # Skip invalid templates
-                        pass
+                    except (OSError, yaml.YAMLError, KeyError, TypeError, AttributeError) as e:
+                        logger.debug(f"Skipping invalid team template at {item}: {e}")
 
     # Sort by name
     templates.sort(key=lambda x: x["metadata"].name)

@@ -672,6 +672,63 @@ class TestWorkspaceReportFull:
         assert result.exit_code == 0
         assert output_file.exists()
 
+    def test_report_handles_malformed_registry(self, runner, tmp_path):
+        """Test report gracefully handles malformed .registry.yaml."""
+        import os
+
+        os.chdir(tmp_path)
+        runner.invoke(workspace, ["init"])
+
+        # Create a project
+        project = tmp_path / "services" / "auth"
+        ldf_dir = project / ".ldf"
+        ldf_dir.mkdir(parents=True)
+        (ldf_dir / "config.yaml").write_text("_schema_version: '1.1'\nproject:\n  name: auth")
+        specs_dir = ldf_dir / "specs"
+        specs_dir.mkdir()
+
+        runner.invoke(workspace, ["add", str(project)])
+
+        # Create malformed registry file (non-dict YAML)
+        registry_path = tmp_path / ".ldf-workspace" / ".registry.yaml"
+        registry_path.parent.mkdir(parents=True, exist_ok=True)
+        registry_path.write_text("just a string, not a dict")
+
+        # Report should still work, just skip the coverage data
+        result = runner.invoke(workspace, ["report", "--format", "json"])
+        assert result.exit_code == 0
+
+        import json
+
+        data = json.loads(result.output)
+        assert "projects" in data
+
+    def test_report_handles_empty_registry(self, runner, tmp_path):
+        """Test report gracefully handles empty .registry.yaml (None)."""
+        import os
+
+        os.chdir(tmp_path)
+        runner.invoke(workspace, ["init"])
+
+        # Create a project
+        project = tmp_path / "services" / "auth"
+        ldf_dir = project / ".ldf"
+        ldf_dir.mkdir(parents=True)
+        (ldf_dir / "config.yaml").write_text("_schema_version: '1.1'\nproject:\n  name: auth")
+        specs_dir = ldf_dir / "specs"
+        specs_dir.mkdir()
+
+        runner.invoke(workspace, ["add", str(project)])
+
+        # Create empty registry file (yaml.safe_load returns None)
+        registry_path = tmp_path / ".ldf-workspace" / ".registry.yaml"
+        registry_path.parent.mkdir(parents=True, exist_ok=True)
+        registry_path.write_text("")
+
+        # Report should still work
+        result = runner.invoke(workspace, ["report", "--format", "json"])
+        assert result.exit_code == 0
+
 
 class TestWorkspaceGraphFull:
     """Full tests for workspace graph command."""

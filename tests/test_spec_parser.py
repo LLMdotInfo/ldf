@@ -557,6 +557,28 @@ class TestExtractGuardrailMatrixEdgeCases:
         assert matrix[0].guardrail_id == 0  # No ID prefix found
         assert matrix[0].guardrail_name == "Testing Coverage"
 
+    def test_handles_reference_line_before_table(self):
+        """Test extraction when Reference line appears between header and table.
+
+        This matches the official LDF template format which includes
+        **Reference:** `.ldf/guardrails.yaml` after the header.
+        """
+        content = """## Guardrail Coverage Matrix
+**Reference:** `.ldf/guardrails.yaml`
+
+| Guardrail | Requirements | Design | Tasks/Tests | Owner | Status |
+|-----------|--------------|--------|-------------|-------|--------|
+| 1. Testing Coverage | [US-1] | [S1] | [T-1] | Dev | TODO |
+| 2. Security Basics | N/A | N/A | N/A | N/A | N/A - no auth |
+"""
+        matrix = extract_guardrail_matrix(content)
+
+        assert len(matrix) == 2
+        assert matrix[0].guardrail_id == 1
+        assert matrix[0].guardrail_name == "Testing Coverage"
+        assert matrix[1].guardrail_id == 2
+        assert matrix[1].status == "N/A - no auth"
+
 
 class TestExtractTasksEdgeCases:
     """Edge case tests for extract_tasks."""

@@ -8,6 +8,8 @@ Works with configurable guardrails from .ldf/guardrails.yaml.
 from pathlib import Path
 from typing import Any
 
+import yaml
+
 # Import the central guardrail loader for parity with CLI
 try:
     from ldf.utils.guardrail_loader import get_active_guardrails
@@ -70,8 +72,18 @@ class GuardrailCoverageValidator:
                 guardrails = get_active_guardrails(self.project_root)
                 # Build name mapping from active guardrails
                 self._guardrails = {g.id: g.name for g in guardrails}
-            except Exception:
-                pass  # Use defaults on error
+            except (
+                ImportError,
+                AttributeError,
+                RuntimeError,
+                OSError,
+                yaml.YAMLError,
+                TypeError,
+                KeyError,
+            ) as e:
+                import logging
+
+                logging.warning(f"Could not load active guardrails, using defaults: {e}")
 
         return self._guardrails
 
