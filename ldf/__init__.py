@@ -3,4 +3,10 @@
 A spec-driven development framework for AI-assisted software engineering.
 """
 
-__version__ = "1.1.2"
+from importlib.metadata import PackageNotFoundError, version
+
+try:
+    __version__ = version("llm-ldf")
+except PackageNotFoundError:
+    # Package not installed (running from source without pip install -e .)
+    __version__ = "0.0.0.dev"

@@ -756,9 +756,9 @@ class TestRunDoctorAutoFix:
         config_path = temp_project / ".ldf" / "config.yaml"
         config_path.unlink()
 
-        # Mock subprocess.run to raise an exception
+        # Mock subprocess.run to raise an OSError (realistic subprocess failure)
         def raise_exception(*args, **kwargs):
-            raise Exception("Subprocess failed")
+            raise OSError("Subprocess failed")
 
         monkeypatch.setattr("subprocess.run", raise_exception)
 

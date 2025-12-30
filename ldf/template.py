@@ -13,6 +13,9 @@ import yaml
 
 from ldf import __version__
 from ldf.utils.console import console
+from ldf.utils.logging import get_logger
+
+logger = get_logger(__name__)
 
 # Allowed template files/directories (v1 - declarative only)
 ALLOWED_TEMPLATE_CONTENTS = {
@@ -591,8 +594,8 @@ def _scan_for_secrets(template_root: Path) -> list[str]:
                     rel_path = yaml_file.relative_to(template_root)
                     warnings.append(f"{rel_path}: {description}")
                     break  # Only report once per file
-        except OSError:
-            pass
+        except OSError as e:
+            logger.debug(f"Skipping unreadable file during secret scan: {yaml_file} - {e}")
 
     return warnings
 

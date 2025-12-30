@@ -589,8 +589,8 @@ def run_doctor(
                             cwd=project_root,
                             capture_output=True,
                         )
-                    except Exception:
-                        pass
+                    except (subprocess.CalledProcessError, FileNotFoundError, OSError) as e:
+                        console.print(f"[yellow]Auto-fix failed: {e}[/yellow]")
 
     return report
 

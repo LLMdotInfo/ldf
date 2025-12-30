@@ -259,8 +259,8 @@ def run_mcp_health(project_root: Path | None = None) -> HealthReport:
             with open(config_path) as f:
                 config = yaml.safe_load(f) or {}
             configured_servers = config.get("mcp_servers", [])
-        except yaml.YAMLError:
-            pass
+        except yaml.YAMLError as e:
+            console.print(f"[yellow]Warning: Invalid config.yaml, using defaults: {e}[/yellow]")
 
     # Default servers if none configured
     if not configured_servers:

@@ -5,6 +5,30 @@ All notable changes to LDF (LLM Development Framework) will be documented in thi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2025-12-29
+
+### Added
+- **Python 3.13 and 3.14 Support** - Extended compatibility testing to Python 3.13 and 3.14
+- **Node.js 22 Support** - Added Node.js 22 to ldf-vscode test matrix
+
+### Changed
+- **Updated Development Dependencies** - pytest ≥8.0.0, pytest-cov ≥5.0.0, black ≥24.0.0, ruff ≥0.5.0, mypy ≥1.10.0
+- **Improved Exception Handling** - Narrowed exception types and added debug logging across 8 modules for better observability
+- **TypeScript 5.5** - Updated ldf-vscode to TypeScript ^5.5.0
+
+### Fixed
+- **Silent Exception Suppression** - Added logging/user feedback for previously silent failures in:
+  - `ldf/doctor.py` - Auto-fix failures now show warnings
+  - `ldf/mcp_health.py` - Config parse errors display warnings
+  - `ldf/convert.py` - Framework detection logs debug info
+  - `ldf/workspace/commands.py` - Registry read errors logged
+  - `ldf/cli.py` - Template discovery errors logged
+  - `ldf/docs.py` - Pack YAML errors logged as warnings
+  - `ldf/template.py` - Unreadable files during secret scan logged
+  - `ldf/_mcp_servers/coverage_reporter/guardrail_validator.py` - Guardrail loader fallbacks logged
+
+---
+
 ## [1.1.1] - 2025-12-29
 
 ### Fixed
