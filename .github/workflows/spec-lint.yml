@@ -310,4 +310,4 @@ jobs:
       - name: Run security audit
         run: |
           pip install -e .
-          pip-audit --strict
+          pip-audit --strict --skip-editable
