@@ -142,11 +142,13 @@ def extract_guardrail_matrix(content: str) -> list[GuardrailMatrixRow]:
 
     # Find the matrix section (allow optional lines like **Reference:** before table)
     # Pattern: header, then skip any lines that don't start with |, then capture the table
-    matrix_match = re.search(
-        r"##\s*Guardrail Coverage Matrix[^\n]*\n+(?:(?!\|)[^\n]*\n)*(\|.+\|[\s\S]*?)(?=\n##|\n\n\n|\Z)",
-        content,
-        re.IGNORECASE,
+    matrix_pattern = (
+        r"##\s*Guardrail Coverage Matrix[^\n]*\n+"  # Header line
+        r"(?:(?!\|)[^\n]*\n)*"  # Skip non-table lines (e.g., **Reference:**)
+        r"(\|.+\|[\s\S]*?)"  # Capture the table
+        r"(?=\n##|\n\n\n|\Z)"  # Until next section or end
     )
+    matrix_match = re.search(matrix_pattern, content, re.IGNORECASE)
 
     if not matrix_match:
         return rows
