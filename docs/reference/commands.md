@@ -737,7 +737,39 @@ ldf workspace validate-refs --format json    # JSON for scripting
 
 ---
 
-### Environment Variable: `LDF_PROJECT`
+### Global Project Targeting Options
+
+When working in a multi-project workspace, you can target a specific project using either CLI flags or an environment variable.
+
+#### CLI Flags: `--project` / `-p`
+
+Target a specific project by alias when running any command from the workspace root.
+
+**Usage:**
+```bash
+ldf --project auth lint --all         # Lint specs in 'auth' project
+ldf -p billing status                 # Show status of 'billing' project
+ldf --project api create-spec users   # Create spec in 'api' project
+ldf -p auth coverage                  # Coverage report for 'auth' project
+```
+
+**Supported Commands:**
+- `lint` - Lint specs in the target project
+- `audit` - Run audit against the target project's specs
+- `status` - Show status of the target project
+- `coverage` - Report coverage for the target project
+- `create-spec` - Create a new spec in the target project
+
+#### Workspace Flag: `--workspace` / `-w`
+
+Explicitly specify the workspace root directory. Useful when running commands from outside the workspace.
+
+**Usage:**
+```bash
+ldf --workspace /path/to/workspace --project auth lint
+```
+
+#### Environment Variable: `LDF_PROJECT`
 
 Set the active project when running commands from a workspace.
 
@@ -745,6 +777,27 @@ Set the active project when running commands from a workspace.
 export LDF_PROJECT=auth
 ldf lint --all  # Runs lint in the 'auth' project
 ```
+
+#### Priority Order
+
+When multiple project indicators are present, they are resolved in this order:
+
+1. **CLI flag** (`--project auth`) - Highest priority
+2. **Environment variable** (`LDF_PROJECT=auth`) - Second priority
+3. **Auto-detection** from current working directory - Default
+
+#### Fallback Behavior
+
+When `--project` specifies a non-existent project alias, the command falls back to the current working directory with a warning message. This graceful degradation allows commands to proceed, but may produce unexpected results if you intended to target a specific project.
+
+```bash
+# If 'nonexistent' is not a valid project alias:
+ldf --project nonexistent lint --all
+# Warning: Project 'nonexistent' not found. Using current directory.
+# (lint runs against cwd instead)
+```
+
+To avoid this, verify your project aliases with `ldf workspace status` or check your `ldf-workspace.yaml`.
 
 ---
 

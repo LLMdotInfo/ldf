@@ -248,7 +248,7 @@ MCP (Model Context Protocol) servers provide real-time access to spec status and
 ### DON'T
 
 - Skip phases to save time
-- Leave guardrails marked N/A without justification
+- Leave guardrails marked N/A without justification (`ldf lint` will warn you)
 - Ignore audit findings
 - Let specs get out of sync with code
 - Over-engineer the spec process for small changes

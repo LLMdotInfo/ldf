@@ -5,6 +5,33 @@ All notable changes to LDF (LLM Development Framework) will be documented in thi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.1] - 2025-12-29
+
+### Fixed
+
+#### Workspace Targeting
+- **`--project` flag now works** - Commands (`lint`, `audit`, `coverage`, `status`, `create-spec`) now correctly use the specified project context instead of always using `cwd`
+- **Priority order documented** - CLI flag (`--project`) > env var (`LDF_PROJECT`) > auto-detect from cwd
+
+#### N/A Status Handling
+- **N/A counting fixed** - Guardrail tracker now correctly counts "N/A - reason" status (uses `startswith` instead of exact match)
+- **Justification required** - `ldf lint` now warns when N/A status lacks justification (use format: "N/A - <reason>")
+
+#### Reference Deduplication
+- **Duplicate references removed** - `parse_references()` now deduplicates by (project, spec, section) to prevent duplicate lint errors
+
+#### Workspace Discovery
+- **Basename collision detection** - Warns when multiple discovered projects have the same alias (e.g., `services/auth` and `libs/auth` both becoming "auth")
+
+#### MCP Health
+- **Dynamic guardrail counts** - `mcp-health` now uses `get_active_guardrails()` instead of hardcoded count of 8
+
+### Changed
+- `get_project_context()` now returns `ProjectContext` with `project_root` for cleaner code
+- Commands gracefully fall back to `cwd` when not in an LDF project (for `status` showing "new" state)
+
+---
+
 ## [1.1.0] - 2025-12-27
 
 ### Added

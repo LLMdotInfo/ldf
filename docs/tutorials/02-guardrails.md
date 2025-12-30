@@ -532,6 +532,8 @@ The matrix appears in **requirements.md** and tracks how each guardrail is addre
 
 **Marking N/A is allowed but requires justification.**
 
+> ⚠️ **Lint Enforcement**: Starting in v1.1.1, `ldf lint` will warn if an N/A status lacks justification. Use the format `N/A - <reason>` (e.g., "N/A - No database access").
+
 ### Valid N/A Examples
 
 **Guardrail 6: Data Validation**

@@ -1,0 +1,21 @@
+# LDF CODEOWNERS
+# See: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# Default owners for everything in the repo
+* @llmdotinfo
+
+# Core CLI and framework
+/ldf/ @llmdotinfo
+/framework/ @llmdotinfo
+
+# MCP servers (critical for AI integration)
+/ldf/_mcp_servers/ @llmdotinfo
+
+# CI/CD configuration
+/.github/ @llmdotinfo
+
+# Documentation
+/docs/ @llmdotinfo
+
+# Tests
+/tests/ @llmdotinfo

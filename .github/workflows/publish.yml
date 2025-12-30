@@ -67,7 +67,7 @@ jobs:
     name: Publish to PyPI
     needs: [build, test]
     runs-on: ubuntu-latest
-    if: github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && inputs.target == 'pypi')
+    if: github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && github.event.inputs.target == 'pypi')
     environment: release
     permissions:
       id-token: write
@@ -86,7 +86,7 @@ jobs:
     name: Publish to TestPyPI
     needs: [build, test]
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' && inputs.target == 'testpypi'
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.target == 'testpypi'
     environment: release
     permissions:
       id-token: write

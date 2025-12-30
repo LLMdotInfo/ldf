@@ -8,6 +8,13 @@ on:
       - 'tests/**'
   workflow_dispatch:
 
+# Permissions needed for PR annotations and comments
+# Note: Forked PRs have read-only access - checks/comments will be skipped
+permissions:
+  checks: write
+  pull-requests: write
+  contents: read
+
 jobs:
   lint-specs:
     runs-on: ubuntu-latest
@@ -38,7 +45,11 @@ jobs:
         run: cat lint-output.txt
 
       - name: Parse lint results and create annotations
-        if: steps.lint.outputs.exit_code != '0'
+        # Only run for PRs (not workflow_dispatch) and skip forked PRs (no write access)
+        if: |
+          steps.lint.outputs.exit_code != '0' &&
+          github.event_name == 'pull_request' &&
+          github.event.pull_request.head.repo.fork == false
         uses: actions/github-script@v7
         with:
           script: |
