@@ -672,7 +672,6 @@ class TestWorkspaceReportFull:
         assert result.exit_code == 0
         assert output_file.exists()
 
-
     def test_report_handles_malformed_registry(self, runner, tmp_path):
         """Test report gracefully handles malformed .registry.yaml."""
         import os

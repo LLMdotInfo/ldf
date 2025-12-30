@@ -72,7 +72,15 @@ class GuardrailCoverageValidator:
                 guardrails = get_active_guardrails(self.project_root)
                 # Build name mapping from active guardrails
                 self._guardrails = {g.id: g.name for g in guardrails}
-            except (ImportError, AttributeError, RuntimeError, OSError, yaml.YAMLError, TypeError, KeyError) as e:
+            except (
+                ImportError,
+                AttributeError,
+                RuntimeError,
+                OSError,
+                yaml.YAMLError,
+                TypeError,
+                KeyError,
+            ) as e:
                 import logging
 
                 logging.warning(f"Could not load active guardrails, using defaults: {e}")

@@ -1770,7 +1770,6 @@ components:
         assert len(team_templates_found) >= 1
         assert any(t["name"] == "my-team-template" for t in team_templates_found)
 
-
     def test_template_list_skips_empty_yaml(
         self, runner: CliRunner, temp_project: Path, monkeypatch
     ):
