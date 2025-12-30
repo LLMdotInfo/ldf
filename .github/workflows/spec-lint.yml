@@ -310,5 +310,9 @@ jobs:
       - name: Run security audit
         run: |
           # Install dependencies from pyproject.toml (not the local package) for security audit
-          pip install $(python -c "import tomllib; print(' '.join(tomllib.load(open('pyproject.toml','rb'))['project']['dependencies']))")
+          python -c "
+          import subprocess, sys, tomllib
+          deps = tomllib.load(open('pyproject.toml', 'rb'))['project']['dependencies']
+          subprocess.run([sys.executable, '-m', 'pip', 'install', *deps], check=True)
+          "
           pip-audit --strict
