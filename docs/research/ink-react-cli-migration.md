@@ -509,6 +509,186 @@ Based on public information about Claude Code's implementation:
 
 ---
 
+## Business Logic Analysis
+
+### Codebase Overview
+
+**Total Python code to potentially port: ~16,000 lines**
+
+| Module | Lines | Purpose | Porting Complexity |
+|--------|-------|---------|-------------------|
+| `cli.py` | 2,465 | Command definitions | Medium (mostly declarative) |
+| `lint.py` | 1,621 | Spec validation rules | High (core business logic) |
+| `workspace/commands.py` | 878 | Multi-project management | Medium |
+| `init.py` | 870 | Project initialization | Medium |
+| `coverage.py` | 800 | Coverage reporting | High (file parsing) |
+| `template.py` | 734 | Template management | Medium |
+| `audit.py` | 662 | Audit generation | Medium |
+| `convert.py` | 651 | Codebase conversion | Medium |
+| `doctor.py` | 623 | Diagnostics | Low |
+| `detection.py` | 546 | Project state detection | Low |
+| `update.py` | 522 | Framework updates | Medium |
+| `audit_api.py` | 480 | API automation | Low (HTTP calls) |
+| **Utilities** | ~2,500 | Shared helpers | Medium |
+
+### Key Data Structures to Port
+
+These dataclasses/models are used throughout and would need TypeScript equivalents:
+
+```typescript
+// From detection.py
+enum ProjectState {
+  NEW = "new",
+  CURRENT = "current",
+  OUTDATED = "outdated",
+  LEGACY = "legacy",
+  PARTIAL = "partial",
+  CORRUPTED = "corrupted"
+}
+
+interface DetectionResult {
+  state: ProjectState;
+  projectRoot: string;
+  installedVersion: string;
+  projectVersion: string | null;
+  hasConfig: boolean;
+  hasGuardrails: boolean;
+  hasSpecsDir: boolean;
+  // ... etc
+}
+
+// From spec_parser.py
+interface TaskItem {
+  id: string;        // e.g., "1.1", "2.3"
+  title: string;
+  status: "pending" | "in_progress" | "complete";
+  dependencies: string[];
+  checklistComplete: boolean;
+}
+
+interface GuardrailMatrixRow {
+  guardrailId: number;
+  guardrailName: string;
+  requirementsRef: string;
+  designRef: string;
+  tasksTestsRef: string;
+  owner: string;
+  status: string;
+}
+
+// From guardrail_loader.py
+interface Guardrail {
+  id: number;
+  name: string;
+  description: string;
+  severity: "critical" | "high" | "medium" | "low";
+  enabled: boolean;
+  checklist: string[];
+  config: Record<string, unknown>;
+}
+```
+
+### Lint Module Deep Dive (Highest Complexity)
+
+The `lint.py` module is the most complex at 1,621 lines. Key components:
+
+1. **SARIF Rule Definitions** (lines 27-94)
+   - 11 rule types for spec validation
+   - Would become a TypeScript const object
+
+2. **LintResult Dataclass** (lines 97+)
+   - Individual result with file, line, column, severity
+   - Maps directly to SARIF format
+
+3. **Validation Functions**:
+   - `validate_spec_structure()` - Check required files exist
+   - `validate_guardrail_coverage()` - Check matrix completeness
+   - `validate_answerpacks()` - Check for unfilled templates
+   - `validate_tasks()` - Check task checklists
+
+4. **Output Formatters**:
+   - `rich` - Rich console tables
+   - `ci` - GitHub Actions annotations
+   - `sarif` - Standard SARIF JSON
+   - `json` - Raw JSON
+   - `text` - Plain text
+
+**Porting Approach**: The logic is mostly string parsing and file I/O. TypeScript with Zod for validation would work well.
+
+### Coverage Module Analysis
+
+The `coverage.py` module (800 lines) handles:
+
+1. **Coverage Data Discovery**
+   - Finds `coverage.json` in various locations
+   - Parses Python/JS coverage formats
+
+2. **Guardrail Mapping**
+   - Maps file coverage to guardrail requirements
+   - Calculates per-guardrail coverage percentages
+
+3. **Snapshot Management**
+   - Save/load coverage snapshots
+   - Compare current vs baseline
+
+4. **Upload Integration**
+   - Artifact upload
+   - S3 upload
+
+**Porting Consideration**: Coverage parsing logic depends on understanding Python/JS coverage formats. Could potentially reuse existing npm packages like `istanbul-lib-coverage`.
+
+### Utility Modules
+
+| Module | Lines | Purpose | TypeScript Equivalent |
+|--------|-------|---------|----------------------|
+| `utils/spec_parser.py` | 376 | Markdown spec parsing | `remark` / custom |
+| `utils/guardrail_loader.py` | 431 | YAML loading | `js-yaml` |
+| `utils/config.py` | 186 | Config management | `js-yaml` + custom |
+| `utils/references.py` | 409 | Cross-project refs | Custom |
+| `utils/security.py` | 226 | Path validation | `path` + custom |
+| `utils/descriptions.py` | 372 | UI text | Static data |
+
+### External Dependencies Mapping
+
+| Python | Purpose | TypeScript Equivalent |
+|--------|---------|----------------------|
+| `click` | CLI framework | `pastel` |
+| `rich` | Terminal formatting | `ink` |
+| `pyyaml` | YAML parsing | `js-yaml` |
+| `jinja2` | Templating | `nunjucks` or `eta` |
+| `questionary` | Interactive prompts | `@inkjs/ui` |
+
+### Risk Assessment
+
+| Area | Risk Level | Mitigation |
+|------|------------|------------|
+| **Spec parsing** | Medium | Well-defined markdown format, testable |
+| **YAML config** | Low | `js-yaml` is mature |
+| **Coverage parsing** | Medium | Multiple formats to support |
+| **File operations** | Low | Node.js `fs` is capable |
+| **Path handling** | Medium | Windows/Unix differences |
+| **Regex patterns** | Low | Similar in JS |
+| **MCP servers** | N/A | Keep as Python (separate process) |
+
+### Recommended Porting Order
+
+1. **Utils first** (foundation)
+   - `utils/config.py` → `lib/config.ts`
+   - `utils/spec_parser.py` → `lib/spec-parser.ts`
+   - `utils/guardrail_loader.py` → `lib/guardrails.ts`
+
+2. **Detection layer** (needed by commands)
+   - `detection.py` → `lib/detection.ts`
+   - `project_resolver.py` → `lib/project-resolver.ts`
+
+3. **Core commands** (visible progress)
+   - `lint.py` → `commands/lint.tsx` + `lib/lint.ts`
+   - `coverage.py` → `commands/coverage.tsx` + `lib/coverage.ts`
+
+4. **Remaining commands** (complete feature parity)
+
+---
+
 ## Proof of Concept
 
 ### Minimal Example: Lint Command
